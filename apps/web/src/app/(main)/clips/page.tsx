@@ -19,24 +19,7 @@ const CLIPS = [
   { id: 'c4', author: { username: 'physics_ke', seed: 'physics' }, subject: 'Physics', description: "Newton's 3rd Law explained with real examples from Kenya's daily life 🚀 #Physics #Learnix", likes: 7600, comments: 178, shares: 320, bg: 'linear-gradient(160deg, #0f0c29, #302b63, #24243e)', emoji: '🚀' },
 ];
 
-const MOCK_COMMENTS: Record<string, Array<{ user: string; seed: string; text: string; likes: number }>> = {
-  c1: [
-    { user: 'brian_ke', seed: 'brian', text: 'This is exactly what I needed for the KCSE! 🔥', likes: 142 },
-    { user: 'grace_form4', seed: 'grace', text: 'Best explanation of photosynthesis I have seen 🌿', likes: 87 },
-    { user: 'amina_learns', seed: 'amina', text: 'Saving this for sure! Thank you Mr. Omondi 🙏', likes: 56 },
-  ],
-  c2: [
-    { user: 'koech_maths', seed: 'koech', text: 'Game changer! Wish I saw this before my CATs', likes: 203 },
-    { user: 'faith_w', seed: 'faith', text: 'The shortcut at 0:12 is brilliant 😭', likes: 91 },
-  ],
-  c3: [
-    { user: 'otieno_chem', seed: 'otieno', text: 'We did this in class today! Amazing to see it visualized', likes: 315 },
-    { user: 'njeri_ke', seed: 'njeri', text: 'Why reactivity increases down the group makes total sense now!', likes: 178 },
-  ],
-  c4: [
-    { user: 'physics_form3', seed: 'pf3', text: 'The matatu example is so relatable 😂 great teaching!', likes: 234 },
-  ],
-};
+const MOCK_COMMENTS: Record<string, Array<{ user: string; seed: string; text: string; likes: number }>> = {};
 
 function fmt(n: number) { return n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n); }
 
