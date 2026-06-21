@@ -1,0 +1,1099 @@
+// ─────────────────────────────────────────────────────────────
+// Learnix — Prisma Schema v3.0 (Global Expansion — Addendum G)
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [uuid_ossp(map: "uuid-ossp"), pgvector(map: "vector"), pg_trgm]
+}
+
+// ─── Enums ───────────────────────────────────────────────────
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  DEACTIVATED
+}
+
+enum AgeBand {
+  UNDER_13
+  TEEN_13_17
+  ADULT_18_PLUS
+}
+
+enum PrivacyMode {
+  PUBLIC
+  PRIVATE
+}
+
+enum PostType {
+  TEXT
+  IMAGE
+  VIDEO
+  DOC
+  POLL
+  QUESTION
+  QUIZ
+  BOOK_EXCERPT
+  PAPER_QUESTION
+  ANNOUNCEMENT
+}
+
+enum ModerationState {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+}
+
+enum LicenseCategory {
+  PUBLIC_DOMAIN
+  OER
+  LICENSED_PUBLISHER
+  INSTITUTION_ONLY
+  USER_UPLOADED_MODERATED
+}
+
+enum AccessType {
+  FREE
+  PLUS
+  PREMIUM
+  INSTITUTION
+}
+
+enum TopicMasteryState {
+  NOT_STARTED
+  LEARNING
+  PRACTICING
+  STRONG
+  MASTERED
+  NEEDS_REVISION
+}
+
+enum SubscriptionPlan {
+  FREE
+  PLUS_PLAN
+  PREMIUM
+  TEACHER
+  CREATOR_PRO
+  INSTITUTION
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum QuestionType {
+  MCQ
+  MULTI
+  TF
+  FILL
+  SHORT
+  MATCH
+  ORDER
+  ESSAY
+  MATH
+  DIAGRAM
+}
+
+enum EmbeddingSourceType {
+  BOOK
+  PAPER
+  MARKING_SCHEME
+  LESSON
+  NOTE
+  TRANSCRIPT
+}
+
+enum Stage {
+  LOWER_PRIMARY
+  UPPER_PRIMARY
+  SECONDARY
+  UNIVERSITY
+  LIFELONG
+}
+
+enum QuizSource {
+  VIDEO
+  LESSON
+  PAPER
+  STANDALONE
+}
+
+// ─── Users & Auth ────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String?   @unique
+  phone           String?   @unique
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  status          UserStatus @default(ACTIVE)
+  ageBand         AgeBand
+  twoFactorSecret String?
+  locale          String    @default("en")           // BCP-47 app display language
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  profile    Profile?
+  roles      UserRole[]
+  sessions   Session[]
+  posts      Post[]
+  comments   Comment[]
+  reactions  Reaction[]
+  saves      Save[]
+  collections Collection[]
+  videos     Video[]
+  xpEvents   XpEvent[]
+  streak     Streak?
+  badges     UserBadge[]
+  topicMastery TopicMastery[]
+  attempts   Attempt[]
+  readingProgress ReadingProgress[]
+  highlights Highlight[]
+  bookNotes  BookNote[]
+  aiConversations AiConversation[]
+  aiFeedback AiFeedback[]
+  notifications Notification[]
+  notificationPreferences NotificationPreference[]
+  reports    Report[]       @relation("reporter")
+  moderationActions ModerationAction[] @relation("moderator")
+  subscriptions Subscription[]
+  payments   Payment[]
+  auditLogs  AuditLog[]
+  followsGiven Follow[] @relation("follower")
+  followsReceived Follow[] @relation("followee")
+  blocksGiven Block[] @relation("blocker")
+  blocksReceived Block[] @relation("blocked")
+  groupsOwned Group[]
+  groupMemberships GroupMember[]
+  messagesSent Message[]
+  conversationParticipants ConversationParticipant[]
+  learnerProfile LearnerProfile?
+  accountSettings AccountSettings?
+
+  @@index([email])
+  @@index([phone])
+  @@index([status])
+  @@index([locale])
+}
+
+model Profile {
+  userId      String      @id @db.Uuid
+  displayName String
+  username    String      @unique
+  bio         String?
+  avatarUrl   String?
+  country     String      @db.VarChar(2) // ISO 3166-1 alpha-2
+  curriculum  String      // e.g., "KCSE", "CBC", "IGCSE"
+  level       String      // e.g., "FORM_4"
+  subjects    String[]
+  languages   String[]
+  privacyMode PrivacyMode @default(PUBLIC)
+  dailyGoalMinutes Int    @default(10)
+  reminderTime String?    // HH:mm format
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([username])
+  @@index([country])
+  @@index([curriculum, level])
+}
+
+model Role {
+  id  String @id @default(uuid()) @db.Uuid
+  key String @unique
+
+  users UserRole[]
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+  assignedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model Session {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  refreshHash String
+  family      String    // for refresh-token rotation tracking
+  device      String?
+  ip          String?
+  userAgent   String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([family])
+}
+
+// ─── Social ──────────────────────────────────────────────────
+
+model Follow {
+  followerId String @db.Uuid
+  followeeId String @db.Uuid
+  createdAt  DateTime @default(now())
+
+  follower User @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followee User @relation("followee", fields: [followeeId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followeeId])
+}
+
+model Block {
+  blockerId String @db.Uuid
+  blockedId String @db.Uuid
+  createdAt DateTime @default(now())
+
+  blocker User @relation("blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+}
+
+// ─── Feed & Posts ────────────────────────────────────────────
+
+model Post {
+  id              String          @id @default(uuid()) @db.Uuid
+  authorId        String          @db.Uuid
+  type            PostType
+  body            String?
+  subjectId       String?         @db.Uuid
+  topicId         String?         @db.Uuid
+  level           String?
+  curriculum      String?
+  locale          String          @default("en")   // BCP-47 content language
+  qualityScore    Float           @default(0)
+  moderationState ModerationState @default(PENDING)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  author   User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  subject  Subject?    @relation(fields: [subjectId], references: [id])
+  topic    Topic?      @relation(fields: [topicId], references: [id])
+  media    PostMedia[]
+  reactions Reaction[]
+  comments Comment[]
+  saves    Save[]
+  video    Video?
+
+  @@index([authorId])
+  @@index([subjectId])
+  @@index([createdAt])
+  @@index([moderationState])
+  @@index([locale, subjectId])
+}
+
+model PostMedia {
+  id     String @id @default(uuid()) @db.Uuid
+  postId String @db.Uuid
+  kind   String // image, video, document, etc.
+  url    String
+  meta   Json?
+  orderIndex Int @default(0)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}
+
+model Reaction {
+  userId String @db.Uuid
+  postId String @db.Uuid
+  kind   String // like, helpful, insightful, celebrate
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId, kind])
+}
+
+model Comment {
+  id       String  @id @default(uuid()) @db.Uuid
+  postId   String  @db.Uuid
+  parentId String? @db.Uuid
+  authorId String  @db.Uuid
+  body     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  post     Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent   Comment? @relation("replies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("replies")
+  author   User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([parentId])
+}
+
+model Save {
+  userId       String  @db.Uuid
+  postId       String  @db.Uuid
+  collectionId String? @db.Uuid
+  createdAt    DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post       Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  collection Collection? @relation(fields: [collectionId], references: [id])
+
+  @@id([userId, postId])
+}
+
+model Collection {
+  id         String @id @default(uuid()) @db.Uuid
+  userId     String @db.Uuid
+  name       String
+  visibility String @default("private")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  saves Save[]
+
+  @@index([userId])
+}
+
+// ─── Videos ──────────────────────────────────────────────────
+
+model Video {
+  id           String   @id @default(uuid()) @db.Uuid
+  postId       String?  @unique @db.Uuid
+  creatorId    String   @db.Uuid
+  muxAssetId   String?
+  durationSec  Int
+  hlsUrl       String?
+  thumbnailUrl String?
+  transcript   String?
+  qualityLabels String[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  post    Post? @relation(fields: [postId], references: [id])
+  creator User  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+}
+
+// ─── Learning ────────────────────────────────────────────────
+
+model Subject {
+  id            String @id @default(uuid()) @db.Uuid
+  key           String @unique
+  nameEn        String
+  canonicalName String                           // official canonical name e.g. "Biology"
+  domain        String @default("General")       // e.g. 'Natural Sciences', 'Mathematics'
+  nameSw        String?
+  createdAt     DateTime @default(now())
+
+  topics Topic[]
+  learningPaths LearningPath[]
+  posts  Post[]
+  books  Book[]
+  pastPapers PastPaper[]
+  curriculumMappings CurriculumSubject[]
+  aliases        CurriculumSubjectAlias[]
+}
+
+model Topic {
+  id        String  @id @default(uuid()) @db.Uuid
+  subjectId String  @db.Uuid
+  parentId  String? @db.Uuid
+  nameEn    String
+  nameSw    String?
+  orderIndex Int    @default(0)
+  createdAt DateTime @default(now())
+
+  subject  Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  parent   Topic?  @relation("subtopics", fields: [parentId], references: [id])
+  children Topic[] @relation("subtopics")
+  lessons  Lesson[]
+  quizzes  Quiz[]
+  posts    Post[]
+  mastery  TopicMastery[]
+
+  @@index([subjectId])
+}
+
+model LearningPath {
+  id         String @id @default(uuid()) @db.Uuid
+  subjectId  String @db.Uuid
+  level      String
+  curriculum String
+  nameEn     String
+  orderIndex Int    @default(0)
+  createdAt  DateTime @default(now())
+
+  subject Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+}
+
+model Lesson {
+  id            String @id @default(uuid()) @db.Uuid
+  pathId        String @db.Uuid
+  topicId       String @db.Uuid
+  title         String
+  durationMin   Int
+  contentBlocks Json
+  status        String @default("draft")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  path    LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  topic   Topic        @relation(fields: [topicId], references: [id])
+  quizzes Quiz[]
+  attempts Attempt[]
+}
+
+model Quiz {
+  id         String @id @default(uuid()) @db.Uuid
+  lessonId   String? @db.Uuid
+  topicId    String? @db.Uuid
+  difficulty String @default("medium")
+  title      String?
+  createdAt  DateTime @default(now())
+
+  lesson    Lesson?    @relation(fields: [lessonId], references: [id])
+  topic     Topic?     @relation(fields: [topicId], references: [id])
+  questions Question[]
+  attempts  Attempt[]
+}
+
+model Question {
+  id            String       @id @default(uuid()) @db.Uuid
+  quizId        String?      @db.Uuid
+  paperId       String?      @db.Uuid
+  type          QuestionType
+  prompt        String
+  options       Json?
+  correctAnswer Json
+  marks         Int          @default(1)
+  rubric        Json?
+  explanation   String?
+  createdAt     DateTime     @default(now())
+
+  quiz  Quiz?      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  paper PastPaper? @relation(fields: [paperId], references: [id])
+}
+
+model Attempt {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  quizId       String?   @db.Uuid
+  paperId      String?   @db.Uuid
+  lessonId     String?   @db.Uuid
+  score        Float?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  answers      Json?
+  timeSpentSec Int       @default(0)
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz   Quiz?      @relation(fields: [quizId], references: [id])
+  paper  PastPaper? @relation(fields: [paperId], references: [id])
+  lesson Lesson?    @relation(fields: [lessonId], references: [id])
+
+  @@index([userId])
+}
+
+// ─── XP, Streaks, Badges ────────────────────────────────────
+
+model XpEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  kind      String
+  amount    Int
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Streak {
+  userId          String   @id @db.Uuid
+  currentDays     Int      @default(0)
+  longestDays     Int      @default(0)
+  lastQualifiedAt DateTime?
+  pauseTokens     Int      @default(1)
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Badge {
+  id       String @id @default(uuid()) @db.Uuid
+  key      String @unique
+  nameEn   String
+  nameSw   String?
+  description String?
+  iconUrl  String?
+  criteria Json
+  createdAt DateTime @default(now())
+
+  users UserBadge[]
+}
+
+model UserBadge {
+  userId   String   @db.Uuid
+  badgeId  String   @db.Uuid
+  earnedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, badgeId])
+}
+
+model TopicMastery {
+  userId    String           @db.Uuid
+  topicId   String           @db.Uuid
+  state     TopicMasteryState @default(NOT_STARTED)
+  updatedAt DateTime         @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@id([userId, topicId])
+}
+
+// ─── Library ─────────────────────────────────────────────────
+
+model Book {
+  id                      String          @id @default(uuid()) @db.Uuid
+  title                   String
+  authors                 String[]
+  publisher               String?
+  isbn                    String?
+  subjectId               String          @db.Uuid
+  level                   String
+  curriculum              String
+  country                 String          @db.VarChar(2)
+  language                String          @default("en")
+  edition                 String?
+  year                    Int?
+  licenseCategory         LicenseCategory
+  licenseAllowsQuoting    Boolean         @default(false)
+  licenseAllowsSummarizing Boolean        @default(false)
+  licenseAllowsOffline    Boolean         @default(false)
+  accessType              AccessType      @default(FREE)
+  pages                   Int?
+  chapters                Json?
+  coverUrl                String?
+  description             String?
+  rating                  Float?
+  fileUrl                 String          // R2 key
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  deletedAt               DateTime?
+
+  subject         Subject           @relation(fields: [subjectId], references: [id])
+  bookChapters    BookChapter[]
+  readingProgress ReadingProgress[]
+  highlights      Highlight[]
+  bookNotes       BookNote[]
+
+  @@index([subjectId])
+  @@index([title])
+}
+
+model BookChapter {
+  id         String @id @default(uuid()) @db.Uuid
+  bookId     String @db.Uuid
+  orderIndex Int
+  title      String
+  pageStart  Int?
+  pageEnd    Int?
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([bookId])
+}
+
+model ReadingProgress {
+  userId      String   @db.Uuid
+  bookId      String   @db.Uuid
+  lastChapter Int?
+  lastCfi     String?
+  percent     Float    @default(0)
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@id([userId, bookId])
+}
+
+model Highlight {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  bookId    String   @db.Uuid
+  cfi       String
+  text      String
+  color     String   @default("yellow")
+  note      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([userId, bookId])
+}
+
+model BookNote {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  bookId    String   @db.Uuid
+  cfi       String?
+  body      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([userId, bookId])
+}
+
+// ─── Past Papers ─────────────────────────────────────────────
+
+model PastPaper {
+  id                 String     @id @default(uuid()) @db.Uuid
+  country            String
+  curriculum         String
+  examBoard          String?
+  institution        String?
+  level              String
+  subjectId          String     @db.Uuid
+  title              String
+  paperCode          String?
+  year               Int
+  session            String?
+  paperType          String?
+  durationMin        Int?
+  totalMarks         Int?
+  fileUrl            String
+  markingSchemeUrl   String?
+  source             String?
+  verificationStatus String     @default("unverified")
+  accessType         AccessType @default(FREE)
+  topics             String[]
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  subject   Subject    @relation(fields: [subjectId], references: [id])
+  questions Question[]
+  attempts  Attempt[]
+
+  @@index([subjectId])
+  @@index([year])
+  @@index([country, curriculum])
+}
+
+// ─── AI / RAG ────────────────────────────────────────────────
+
+model AiConversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  mode      String   @default("Tutor")  // Explain, QuizMe, PastPaper, Tutor, etc.
+  subject   String?                      // canonical subject name (string, not FK)
+  subjectId String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  user     User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+  chatMsgs AiConversationMessage[] // new SSE-oriented message store
+
+  @@index([userId])
+}
+
+// Lightweight message store for SSE tutor chat (separate from legacy AiMessage)
+model AiConversationMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @db.Uuid
+  role           String   // user | assistant
+  content        String
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+model AiMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @db.Uuid
+  role           String   // user, assistant, system
+  content        String
+  sources        Json?
+  tokenIn        Int      @default(0)
+  tokenOut       Int      @default(0)
+  modelKey       String?
+  latencyMs      Int?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  feedback     AiFeedback[]
+}
+
+model AiFeedback {
+  id          String   @id @default(uuid()) @db.Uuid
+  messageId   String   @db.Uuid
+  userId      String   @db.Uuid
+  rating      Int      // 1-5 or thumbs: 1 = down, 5 = up
+  reasonCodes String[]
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  message AiMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Social Extras ───────────────────────────────────────────
+
+model Group {
+  id         String  @id @default(uuid()) @db.Uuid
+  name       String
+  subjectId  String? @db.Uuid
+  level      String?
+  curriculum String?
+  visibility String  @default("public")
+  ownerId    String  @db.Uuid
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  owner   User          @relation(fields: [ownerId], references: [id])
+  members GroupMember[]
+}
+
+model GroupMember {
+  groupId  String @db.Uuid
+  userId   String @db.Uuid
+  role     String @default("member")
+  joinedAt DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+}
+
+model Conversation {
+  id           String  @id @default(uuid()) @db.Uuid
+  kind         String  // dm, group
+  title        String?
+  createdAt    DateTime @default(now())
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  conversationId String @db.Uuid
+  userId         String @db.Uuid
+  joinedAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+}
+
+model Message {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @db.Uuid
+  senderId       String   @db.Uuid
+  body           String
+  attachments    Json?
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+// ─── Notifications ───────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  category  String   // social, learning, resource, ai, group, teacher, admin, system
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  id          String  @id @default(uuid()) @db.Uuid
+  userId      String  @db.Uuid
+  channel     String  // push, email, sms, whatsapp, in_app
+  category    String
+  enabled     Boolean @default(true)
+  quietStart  String? // HH:mm
+  quietEnd    String? // HH:mm
+  sabbathDay  String? // e.g., "saturday"
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channel, category])
+}
+
+// ─── Moderation ──────────────────────────────────────────────
+
+model Report {
+  id         String   @id @default(uuid()) @db.Uuid
+  reporterId String   @db.Uuid
+  targetType String
+  targetId   String
+  reasonCode String
+  details    String?
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+
+  reporter User @relation("reporter", fields: [reporterId], references: [id])
+
+  @@index([status])
+}
+
+model ModerationAction {
+  id          String   @id @default(uuid()) @db.Uuid
+  moderatorId String   @db.Uuid
+  targetType  String
+  targetId    String
+  action      String
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  moderator User @relation("moderator", fields: [moderatorId], references: [id])
+}
+
+// ─── Payments ────────────────────────────────────────────────
+
+model Subscription {
+  id               String             @id @default(uuid()) @db.Uuid
+  userId           String             @unique @db.Uuid
+  plan             SubscriptionPlan
+  status           SubscriptionStatus @default(TRIALING)
+  provider         String             @default("none") // mpesa, paypal, stripe
+  providerSubId    String?
+  currentPeriodEnd DateTime?
+  renewsAt         DateTime?
+  canceledAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([userId])
+}
+
+model Payment {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @db.Uuid
+  subscriptionId     String?  @db.Uuid
+  // ── Plan / amounts ───────────────────────────────────────
+  plan               String   @default("PLUS")      // matches SubscriptionPlan enum string
+  amount             Int      @default(0)            // stored in minor units (KES) or cents (USD)
+  currency           String   @default("KES")
+  method             String   @default("MPESA")      // MPESA | PAYPAL
+  status             String   @default("PENDING")    // PENDING | SUCCESS | FAILED | REFUNDED
+  // ── M-Pesa specific ──────────────────────────────────────
+  msisdn             String?
+  checkoutRequestId  String?                         // Safaricom CheckoutRequestID
+  merchantRequestId  String?                         // Safaricom MerchantRequestID
+  mpesaReceipt       String?                         // Safaricom receipt number
+  // ── PayPal specific ──────────────────────────────────────
+  providerOrderId    String?                         // PayPal orderId
+  providerCaptureId  String?                         // PayPal captureId
+  // ── Legacy / generic ─────────────────────────────────────
+  providerRef        String?
+  raw                Json?
+  // ── Entitlement guard ────────────────────────────────────
+  entitlementGranted Boolean  @default(false)
+  failureReason      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId])
+  @@index([checkoutRequestId])
+  @@index([providerOrderId])
+  @@index([status])
+}
+
+// ─── Audit ───────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  targetType String?
+  targetId   String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ─── Taxonomy: Country → Curriculum → Level → Subject ────────
+
+model Country {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  iso2      String   @unique @db.VarChar(2)
+  flag      String
+  createdAt DateTime @default(now())
+
+  curricula Curriculum[]
+}
+
+model Curriculum {
+  id        String   @id @default(uuid()) @db.Uuid
+  countryId String   @db.Uuid
+  code      String
+  name      String
+  createdAt DateTime @default(now())
+
+  country  Country                  @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  levels   EducationLevel[]
+  subjects CurriculumSubject[]
+  aliases  CurriculumSubjectAlias[]
+
+  @@unique([countryId, code])
+}
+
+model EducationLevel {
+  id           String   @id @default(uuid()) @db.Uuid
+  curriculumId String   @db.Uuid
+  stage        Stage
+  name         String
+  orderIndex   Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  curriculum Curriculum             @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  subjects   CurriculumSubject[]
+  aliases    CurriculumSubjectAlias[]
+
+  @@unique([curriculumId, name])
+  @@index([curriculumId])
+}
+
+model CurriculumSubject {
+  id           String  @id @default(uuid()) @db.Uuid
+  curriculumId String  @db.Uuid
+  levelId      String? @db.Uuid
+  subjectId    String  @db.Uuid
+  isCore       Boolean @default(true)
+
+  curriculum Curriculum      @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  level      EducationLevel? @relation(fields: [levelId], references: [id])
+  subject    Subject         @relation(fields: [subjectId], references: [id])
+
+  @@unique([curriculumId, levelId, subjectId])
+}
+
+// Local name overrides for a canonical subject within a curriculum.
+// Allows IGCSE to call "Biology" → "Combined Science", IB to use "Sciences", etc.
+model CurriculumSubjectAlias {
+  id           String  @id @default(uuid()) @db.Uuid
+  curriculumId String  @db.Uuid
+  subjectId    String  @db.Uuid
+  levelId      String? @db.Uuid
+  localName    String                   // local display name within this curriculum
+  isCore       Boolean @default(true)
+
+  curriculum Curriculum      @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  subject    Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  level      EducationLevel? @relation(fields: [levelId], references: [id])
+
+  @@unique([curriculumId, subjectId, levelId])
+  @@index([curriculumId])
+  @@index([subjectId])
+}
+
+// ─── Learner Profile (Onboarding Result §8) ──────────────────
+
+model LearnerProfile {
+  userId              String   @id @db.Uuid
+  stage               Stage    @default(SECONDARY)
+  countryId           String?  @db.Uuid           // nullable until country step is completed
+  curriculumId        String?  @db.Uuid
+  levelId             String?  @db.Uuid
+  subjectIds          String[] @db.Uuid
+  dailyGoalMinutes    Int      @default(10)
+  examGoal            String?
+  examDate            DateTime?
+  completedOnboarding Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Account Settings (§12) ──────────────────────────────────
+
+model AccountSettings {
+  userId            String  @id @db.Uuid
+  isPrivate         Boolean @default(false)
+  theme             String  @default("dark")
+  language          String  @default("en")
+  allowDmsFrom      String  @default("followers")
+  allowCommentsFrom String  @default("everyone")
+  pushEnabled       Boolean @default(true)
+  emailEnabled      Boolean @default(true)
+  smsEnabled        Boolean @default(false)
+  quietHoursStart   Int?
+  quietHoursEnd     Int?
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Locale Registry (Addendum G) ────────────────────────────
+// Each row = one BCP-47 locale supported or planned.
+// Only locales with status='complete' appear in the language selector.
+// RTL=true → UI must flip dir="rtl" and use logical CSS properties.
+model Locale {
+  code        String  @id                   // BCP-47: 'en', 'sw', 'zh-Hans', 'ar'
+  englishName String                         // "Swahili"
+  nativeName  String                         // "Kiswahili"
+  rtl         Boolean @default(false)        // Arabic, Hebrew, Urdu, Farsi etc.
+  status      String  @default("draft")      // draft | in_review | complete
+}
