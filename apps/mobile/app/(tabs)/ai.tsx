@@ -30,6 +30,7 @@ export default function AiScreen() {
   const [msgCount, setMsgCount] = useState(3); // Start with 3 messages sent to show limit bar activity
   const [isPremium, setIsPremium] = useState(false);
   const [limitAlertOpen, setLimitAlertOpen] = useState(false);
+  const conversationId = useRef<string | null>(null);
 
   const listRef = useRef<FlatList>(null);
 
@@ -54,25 +55,25 @@ export default function AiScreen() {
     setMsgCount(prev => prev + 1);
 
     try {
-      const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
       const res = await fetch(`${API_BASE}/ai/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, mode }),
+        headers: { 'Content-Type': 'application/json' }, // Needs authorization header if using auth
+        body: JSON.stringify({ message: content, conversationId: conversationId.current, subject: mode }),
       });
-      const { data } = await res.json();
+      
+      if (!res.ok) throw new Error('API error');
+      
+      const { conversationId: newConvId, message: aiMsg } = await res.json();
+      if (newConvId) conversationId.current = newConvId;
+
       setMessages(m => m.filter(x => x.id !== 'loading').concat({
-        id: (Date.now() + 1).toString(), role: 'assistant', content: data.content, sources: data.sources,
+        id: aiMsg.id, role: 'assistant', content: aiMsg.content, sources: aiMsg.sources,
       }));
     } catch {
       setMessages(m => m.filter(x => x.id !== 'loading').concat({
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Great question! Let me break this down for you step by step.\n\nThis is one of the most commonly tested KCSE topics. Can you tell me what you already understand about this topic? I\'ll tailor my explanation to your level. 🎓',
-        sources: [
-          { label: 'Biology Form 4 Textbook (Ch. 3)', type: 'book' },
-          { label: 'KCSE 2023 Paper 1', type: 'paper' },
-        ],
+        content: '⚠️ Failed to connect to AI Tutor. Please check your connection or try again later.',
       }));
     }
     setLoading(false);

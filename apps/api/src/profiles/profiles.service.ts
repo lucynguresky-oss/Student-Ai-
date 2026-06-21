@@ -1,106 +1,111 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdateProfileRequest } from '@learnix/types';
+import { UpdateProfileDto } from '../users/dto/update-profile.dto';
 
 @Injectable()
 export class ProfilesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findByUsername(username: string) {
-    const profile = await this.prisma.profile.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { username },
-      include: {
-        user: {
-          select: {
-            streak: true,
-            status: true,
-            ageBand: true,
-          },
-        },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        bio: true,
+        avatarUrl: true,
+        isPrivate: true,
+        isVerified: true,
+        role: true,
+        xp: true,
+        streakCount: true,
+        createdAt: true,
       },
     });
 
-    if (!profile) return null;
+    if (!user) return null;
 
     // Get counts
     const followersCount = await this.prisma.follow.count({
-      where: { followeeId: profile.userId },
+      where: { followingId: user.id },
     });
     const followingCount = await this.prisma.follow.count({
-      where: { followerId: profile.userId },
+      where: { followerId: user.id },
     });
     const postsCount = await this.prisma.post.count({
-      where: { authorId: profile.userId },
+      where: { authorId: user.id },
     });
 
     return {
-      ...profile,
+      ...user,
+      userId: user.id, // For backward compatibility with clients expecting profile.userId
       followersCount,
       followingCount,
       postsCount,
     };
   }
 
-  async updateProfile(userId: string, data: UpdateProfileRequest) {
-    // Need to handle username uniqueness if updating username
-    if (data.username) {
-      const existing = await this.prisma.profile.findUnique({
-        where: { username: data.username },
-      });
-      if (existing && existing.userId !== userId) {
-        throw new BadRequestException('Username is already taken');
-      }
-    }
-
-    return this.prisma.profile.update({
-      where: { userId },
+  async updateProfile(userId: string, data: UpdateProfileDto) {
+    // We already have a UsersService for this, but since ProfilesController calls this:
+    return this.prisma.user.update({
+      where: { id: userId },
       data,
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        bio: true,
+        avatarUrl: true,
+        isPrivate: true,
+      },
     });
   }
 
   async followUser(followerId: string, targetUsername: string) {
-    const targetProfile = await this.prisma.profile.findUnique({
+    const targetUser = await this.prisma.user.findUnique({
       where: { username: targetUsername },
     });
 
-    if (!targetProfile) {
+    if (!targetUser) {
       throw new NotFoundException('User not found');
     }
 
-    if (followerId === targetProfile.userId) {
+    if (followerId === targetUser.id) {
       throw new BadRequestException('Cannot follow yourself');
     }
 
     await this.prisma.follow.upsert({
       where: {
-        followerId_followeeId: {
+        followerId_followingId: {
           followerId,
-          followeeId: targetProfile.userId,
+          followingId: targetUser.id,
         },
       },
       update: {},
       create: {
         followerId,
-        followeeId: targetProfile.userId,
+        followingId: targetUser.id,
+        status: targetUser.isPrivate ? 'PENDING' : 'ACCEPTED',
       },
     });
   }
 
   async unfollowUser(followerId: string, targetUsername: string) {
-    const targetProfile = await this.prisma.profile.findUnique({
+    const targetUser = await this.prisma.user.findUnique({
       where: { username: targetUsername },
     });
 
-    if (!targetProfile) {
+    if (!targetUser) {
       throw new NotFoundException('User not found');
     }
 
     try {
       await this.prisma.follow.delete({
         where: {
-          followerId_followeeId: {
+          followerId_followingId: {
             followerId,
-            followeeId: targetProfile.userId,
+            followingId: targetUser.id,
           },
         },
       });

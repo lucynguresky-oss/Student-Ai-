@@ -1,46 +1,69 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { HealthModule } from './health/health.module';
-import { PrismaModule } from './prisma/prisma.module';
-import { AuthModule } from './auth/auth.module';
-import { ProfilesModule } from './profiles/profiles.module';
-import { PostsModule } from './posts/posts.module';
-import { LearnModule } from './learn/learn.module';
-import { AiModule } from './ai/ai.module';
-import { SubscriptionsModule } from './subscriptions/subscriptions.module';
-import { MessagesModule } from './messages/messages.module';
-import { SearchModule } from './search/search.module';
-import { TaxonomyModule } from './taxonomy/taxonomy.module';
-import { OnboardingModule } from './onboarding/onboarding.module';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { QuizzesModule } from './quizzes/quizzes.module';
+import configuration from './config/configuration';
+import { PrismaModule } from './prisma/prisma.module';
+import { XpModule } from './common/xp.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { PostsModule } from './posts/posts.module';
+import { FeedModule } from './feed/feed.module';
+import { CommentsModule } from './comments/comments.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ModerationModule } from './moderation/moderation.module';
+import { MessagingModule } from './messaging/messaging.module';
+import { SearchModule } from './search/search.module';
+import { SubjectsModule } from './subjects/subjects.module';
+import { StoriesModule } from './stories/stories.module';
+import { SafetyModule } from './safety/safety.module';
+import { SavedModule } from './saved/saved.module';
+import { AiTutorModule } from './ai-tutor/ai-tutor.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      load: [configuration],
     }),
-    ThrottlerModule.forRoot([
-      {
-        name: 'auth',
-        ttl: 900, // 15 minutes in seconds
-        limit: 5,  // 5 requests
-      },
-    ]),
+
+    // Rate limiting — configured from env via configuration.ts
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          ttl: config.get<number>('throttle.ttl') ?? 60_000,
+          limit: config.get<number>('throttle.limit') ?? 120,
+        },
+      ],
+    }),
+
+    // Core infrastructure
     PrismaModule,
-    HealthModule,
+
+    // XP / gamification — global so any module can inject XpService
+    XpModule,
+
+    // Feature modules
     AuthModule,
-    ProfilesModule,
+    UsersModule,
     PostsModule,
-    LearnModule,
-    AiModule,
-    SubscriptionsModule,
-    MessagesModule,
+    FeedModule,
+    CommentsModule,
+    NotificationsModule,
+    ModerationModule,
+    MessagingModule,
+
+    // Discovery & curriculum
     SearchModule,
-    TaxonomyModule,
-    OnboardingModule,
-    QuizzesModule,
+    SubjectsModule,
+
+    // AI Tutor
+    AiTutorModule,
+
+    // Social parity
+    StoriesModule,
+    SafetyModule,
+    SavedModule,
   ],
 })
 export class AppModule {}

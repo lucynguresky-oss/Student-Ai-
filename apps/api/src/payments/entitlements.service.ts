@@ -41,26 +41,36 @@ export class EntitlementsService {
     const periodEnd = new Date(now);
     periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-    const plan = toPlanEnum(payment.plan);
+    const plan = toPlanEnum(payment.plan ?? 'FREE');
+
+    const existingSub = await this.prisma.subscription.findFirst({
+      where: { userId: payment.userId },
+    });
+
+    if (existingSub) {
+      await this.prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          plan,
+          status: 'ACTIVE',
+          currentPeriodEnd: periodEnd,
+          provider: payment.method ?? 'none',
+        },
+      });
+    } else {
+      await this.prisma.subscription.create({
+        data: {
+          userId: payment.userId,
+          plan,
+          status: 'ACTIVE',
+          currentPeriodEnd: periodEnd,
+          provider: payment.method ?? 'none',
+        },
+      });
+    }
 
     await this.prisma.$transaction([
-      // Subscription is userId-unique — upsert keeps exactly one row per user
-      this.prisma.subscription.upsert({
-        where:  { userId: payment.userId },
-        create: {
-          userId:          payment.userId,
-          plan,
-          status:          'ACTIVE',
-          currentPeriodEnd: periodEnd,
-          provider:        payment.method ?? 'none',
-        },
-        update: {
-          plan,
-          status:          'ACTIVE',
-          currentPeriodEnd: periodEnd,
-          provider:        payment.method ?? 'none',
-        },
-      }),
+
       this.prisma.payment.update({
         where: { id: payment.id },
         data:  { entitlementGranted: true },

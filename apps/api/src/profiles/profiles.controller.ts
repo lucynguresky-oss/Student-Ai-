@@ -11,7 +11,7 @@ import {
 import { ProfilesService } from './profiles.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { UpdateProfileRequest } from '@learnix/types';
+import { UpdateProfileDto } from '../users/dto/update-profile.dto';
 
 @Controller('profiles')
 export class ProfilesController {
@@ -30,7 +30,7 @@ export class ProfilesController {
   @Patch('me')
   async updateProfile(
     @CurrentUser() user: any,
-    @Body() updateData: UpdateProfileRequest,
+    @Body() updateData: UpdateProfileDto,
   ) {
     const updated = await this.profilesService.updateProfile(user.userId, updateData);
     return { data: updated };

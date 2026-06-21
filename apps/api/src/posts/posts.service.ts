@@ -1,169 +1,343 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { ModerationStatus, NotificationType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ModerationService } from '../moderation/moderation.service';
+import { XpService } from '../common/xp.service';
+import { extractMentions } from '../common/text.util';
+import { CreatePostDto } from './dto/create-post.dto';
+
+const XP_PER_POST = 10;
 
 @Injectable()
 export class PostsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly moderation: ModerationService,
+    private readonly xp: XpService,
+  ) {}
 
-  async getFeed(userId?: string, cursor?: string, limit: number = 20) {
-    let whereClause: any = {
-      deletedAt: null,
-      moderationState: 'APPROVED',
-    };
+  async create(authorId: string, dto: CreatePostDto) {
+    const tags = extractHashtags(dto.caption ?? '');
 
-    if (userId) {
-      const learnerProfile = await this.prisma.learnerProfile.findUnique({
-        where: { userId },
+    const post = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.post.create({
+        data: {
+          authorId,
+          type: dto.type,
+          caption: dto.caption,
+          visibility: dto.visibility ?? 'PUBLIC',
+          subjectId: dto.subjectId,
+          media: {
+            create: dto.media.map((m, i) => ({
+              type: m.type,
+              url: m.url,
+              thumbnailUrl: m.thumbnailUrl,
+              blurhash: m.blurhash,
+              width: m.width,
+              height: m.height,
+              durationSec: m.durationSec,
+              position: i,
+            })),
+          },
+        },
       });
 
-      if (learnerProfile) {
-        let levelName: string | undefined = undefined;
-        if (learnerProfile.levelId) {
-          const level = await this.prisma.educationLevel.findUnique({
-            where: { id: learnerProfile.levelId },
-          });
-          if (level) {
-            levelName = level.name;
-          }
-        }
-
-        whereClause = {
-          ...whereClause,
-          OR: [
-            {
-              subjectId: { in: learnerProfile.subjectIds },
-              ...(levelName ? { level: levelName } : {}),
-            },
-            {
-              subjectId: null,
-              level: null,
-            },
-          ],
-        };
+      // upsert hashtags and link them
+      for (const tag of tags) {
+        const hashtag = await tx.hashtag.upsert({
+          where: { tag },
+          create: { tag },
+          update: {},
+        });
+        await tx.postHashtag.create({
+          data: { postId: created.id, hashtagId: hashtag.id },
+        });
       }
+
+      // reward content creation (Duolingo-style XP loop)
+      await tx.user.update({
+        where: { id: authorId },
+        data: { xp: { increment: XP_PER_POST } },
+      });
+
+      return created;
+    });
+
+    // Fire-and-forget XP + streak update
+    void this.xp.awardPostXP(authorId);
+
+    // AI screen for educational value: approves, flags for review, or removes
+    // (and warns the author). Runs inline so the response reflects the verdict.
+    const status = await this.moderation.screenPost(post.id);
+    if (status !== ModerationStatus.REMOVED) {
+      await this.processMentions(post.id, authorId, dto.caption ?? '');
     }
 
-    const posts = await this.prisma.post.findMany({
-      where: whereClause,
-      take: limit,
-      skip: cursor ? 1 : 0,
-      cursor: cursor ? { id: cursor } : undefined,
-      orderBy: {
-        createdAt: 'desc',
-      },
-      include: {
-        media: true,
-        video: true,
-        subject: true,
-        _count: {
+    return this.findOne(post.id, authorId);
+  }
+
+  /** Resolve @mentions in a caption → tag rows + notifications. */
+  private async processMentions(
+    postId: string,
+    authorId: string,
+    caption: string,
+  ): Promise<void> {
+    const usernames = extractMentions(caption);
+    if (!usernames.length) return;
+    const users = await this.prisma.user.findMany({
+      where: { username: { in: usernames }, NOT: { id: authorId } },
+      select: { id: true },
+    });
+    if (!users.length) return;
+    await this.prisma.$transaction([
+      ...users.map((u) =>
+        this.prisma.postMention.upsert({
+          where: {
+            postId_mentionedUserId: { postId, mentionedUserId: u.id },
+          },
+          create: { postId, mentionedUserId: u.id },
+          update: {},
+        }),
+      ),
+      ...users.map((u) =>
+        this.prisma.notification.create({
+          data: {
+            userId: u.id,
+            actorId: authorId,
+            type: NotificationType.MENTION,
+            postId,
+          },
+        }),
+      ),
+    ]);
+  }
+
+  async findOne(postId: string, viewerId?: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      include: this.postInclude(),
+    });
+    if (!post) throw new NotFoundException('Post not found');
+    return this.decorate(post, viewerId);
+  }
+
+  async remove(postId: string, userId: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { authorId: true },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+    if (post.authorId !== userId) {
+      throw new ForbiddenException('You can only delete your own posts');
+    }
+    await this.prisma.post.delete({ where: { id: postId } });
+    return { deleted: true };
+  }
+
+  /** Users who liked a post (Instagram shows this list). */
+  async likers(postId: string, q: { cursor?: string; limit: number }) {
+    const rows = await this.prisma.like.findMany({
+      where: { postId },
+      orderBy: { createdAt: 'desc' },
+      take: q.limit + 1,
+      ...(q.cursor
+        ? { cursor: { userId_postId: { userId: q.cursor, postId } }, skip: 1 }
+        : {}),
+      select: {
+        userId: true,
+        user: {
           select: {
-            reactions: true,
-            comments: true,
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+            isVerified: true,
           },
         },
       },
     });
-
-    const authorIds = posts.map(p => p.authorId);
-    const profiles = await this.prisma.profile.findMany({
-      where: { userId: { in: authorIds } },
-    });
-    
-    const profileMap = new Map(profiles.map(p => [p.userId, p]));
-
-    return posts.map(post => ({
-      ...post,
-      author: profileMap.get(post.authorId),
-    }));
+    const hasMore = rows.length > q.limit;
+    const slice = hasMore ? rows.slice(0, q.limit) : rows;
+    return {
+      items: slice.map((r) => r.user),
+      nextCursor: hasMore ? slice[slice.length - 1].userId : null,
+    };
   }
 
-  async createPost(userId: string, data: any) {
-    return this.prisma.post.create({
-      data: {
-        authorId: userId,
-        type: data.type || 'TEXT',
-        body: data.body,
-        subjectId: data.subjectId,
-        topicId: data.topicId,
-      },
+  /** Edit a post's caption — re-syncs hashtags, re-screens, re-processes mentions. */
+  async editCaption(postId: string, userId: string, caption: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { authorId: true },
     });
-  }
-
-  async reactToPost(userId: string, postId: string, kind: string = 'LIKE') {
-    const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post) throw new NotFoundException('Post not found');
+    if (post.authorId !== userId) {
+      throw new ForbiddenException('You can only edit your own posts');
+    }
 
-    return this.prisma.reaction.upsert({
-      where: {
-        userId_postId_kind: {
-          userId,
-          postId,
-          kind,
-        },
-      },
-      update: {},
-      create: {
-        userId,
-        postId,
-        kind,
-      },
-    });
-  }
-
-  async savePost(userId: string, postId: string) {
-    const post = await this.prisma.post.findUnique({ where: { id: postId } });
-    if (!post) throw new NotFoundException('Post not found');
-    
-    return this.prisma.save.upsert({
-      where: {
-        userId_postId: {
-          userId,
-          postId,
-        }
-      },
-      update: {},
-      create: {
-        userId,
-        postId,
+    const tags = extractHashtags(caption);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.post.update({ where: { id: postId }, data: { caption } });
+      await tx.postHashtag.deleteMany({ where: { postId } });
+      for (const tag of tags) {
+        const hashtag = await tx.hashtag.upsert({
+          where: { tag },
+          create: { tag },
+          update: {},
+        });
+        await tx.postHashtag.create({
+          data: { postId, hashtagId: hashtag.id },
+        });
       }
     });
+
+    const status = await this.moderation.screenPost(postId);
+    if (status !== ModerationStatus.REMOVED) {
+      await this.processMentions(postId, userId, caption);
+    }
+    return this.findOne(postId, userId);
   }
 
-  async addComment(userId: string, postId: string, body: string) {
-    const post = await this.prisma.post.findUnique({ where: { id: postId } });
+  /** Count a view (used by feed/reels/post open). */
+  async registerView(postId: string) {
+    await this.prisma.post.update({
+      where: { id: postId },
+      data: { viewCount: { increment: 1 } },
+    });
+    return { ok: true };
+  }
+
+  async like(postId: string, userId: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, authorId: true },
+    });
     if (!post) throw new NotFoundException('Post not found');
 
-    return this.prisma.comment.create({
-      data: {
-        postId,
-        authorId: userId,
-        body,
-        parentId: null, // MVP: top-level comments only
-      },
-    });
+    try {
+      await this.prisma.$transaction([
+        this.prisma.like.create({ data: { postId, userId } }),
+        this.prisma.post.update({
+          where: { id: postId },
+          data: { likeCount: { increment: 1 } },
+        }),
+      ]);
+      if (post.authorId !== userId) {
+        await this.prisma.notification.create({
+          data: {
+            userId: post.authorId,
+            actorId: userId,
+            type: NotificationType.LIKE,
+            postId,
+          },
+        });
+        // Award XP to the author for receiving a like
+        void this.xp.awardLikeReceivedXP(post.authorId);
+      }
+    } catch (e) {
+      // unique violation => already liked, make it idempotent
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        return this.likeState(postId, userId);
+      }
+      throw e;
+    }
+    return this.likeState(postId, userId);
   }
 
-  async getComments(postId: string) {
-    const comments = await this.prisma.comment.findMany({
-      where: { postId, deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        author: {
-          include: {
-            profile: true,
-          },
+  async unlike(postId: string, userId: string) {
+    const deleted = await this.prisma.like.deleteMany({
+      where: { postId, userId },
+    });
+    if (deleted.count > 0) {
+      await this.prisma.post.update({
+        where: { id: postId },
+        data: { likeCount: { decrement: 1 } },
+      });
+    }
+    return this.likeState(postId, userId);
+  }
+
+  async save(postId: string, userId: string, collectionId?: string) {
+    await this.prisma.bookmark.upsert({
+      where: { userId_postId: { userId, postId } },
+      create: { userId, postId, collectionId },
+      update: { collectionId },
+    });
+    await this.syncSaveCount(postId);
+    return { saved: true };
+  }
+
+  async unsave(postId: string, userId: string) {
+    await this.prisma.bookmark.deleteMany({ where: { userId, postId } });
+    await this.syncSaveCount(postId);
+    return { saved: false };
+  }
+
+  // ---- shared shaping (also reused by the feed module) ----
+
+  postInclude(): Prisma.PostInclude {
+    return {
+      author: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatarUrl: true,
+          isVerified: true,
         },
       },
-    });
-
-    return comments.map(c => ({
-      id: c.id,
-      body: c.body,
-      createdAt: c.createdAt,
-      author: {
-        username: c.author.profile?.username || 'unknown',
-        displayName: c.author.profile?.displayName || 'Unknown User',
-      },
-    }));
+      media: { orderBy: { position: 'asc' } },
+      subject: { select: { id: true, nameEn: true } },
+    };
   }
+
+  async decorate<T extends { id: string }>(post: T, viewerId?: string) {
+    if (!viewerId) return { ...post, viewer: { liked: false, saved: false } };
+    const [liked, saved] = await Promise.all([
+      this.prisma.like.findUnique({
+        where: { userId_postId: { userId: viewerId, postId: post.id } },
+        select: { postId: true },
+      }),
+      this.prisma.bookmark.findUnique({
+        where: { userId_postId: { userId: viewerId, postId: post.id } },
+        select: { postId: true },
+      }),
+    ]);
+    return { ...post, viewer: { liked: !!liked, saved: !!saved } };
+  }
+
+  private async likeState(postId: string, userId: string) {
+    const [post, liked] = await Promise.all([
+      this.prisma.post.findUnique({
+        where: { id: postId },
+        select: { likeCount: true },
+      }),
+      this.prisma.like.findUnique({
+        where: { userId_postId: { userId, postId } },
+        select: { postId: true },
+      }),
+    ]);
+    return { liked: !!liked, likeCount: post?.likeCount ?? 0 };
+  }
+
+  private async syncSaveCount(postId: string) {
+    const count = await this.prisma.bookmark.count({ where: { postId } });
+    await this.prisma.post.update({
+      where: { id: postId },
+      data: { saveCount: count },
+    });
+  }
+}
+
+/** Pull #hashtags out of caption text, normalised to lowercase, deduped. */
+function extractHashtags(text: string): string[] {
+  const matches = text.match(/#([\p{L}\p{N}_]+)/gu) ?? [];
+  return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))];
 }

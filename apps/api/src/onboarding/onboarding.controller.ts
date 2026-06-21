@@ -2,7 +2,6 @@ import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { OnboardingService } from './onboarding.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { OnboardingAnswerRequest } from '@learnix/types';
 
 @Controller('onboarding')
 @UseGuards(JwtAuthGuard)
@@ -21,7 +20,7 @@ export class OnboardingController {
   @Post('answer')
   async submitAnswer(
     @CurrentUser() user: any,
-    @Body() body: OnboardingAnswerRequest,
+    @Body() body: { stepId: string; value: string | string[] | number },
   ) {
     const result = await this.onboardingService.submitAnswer(
       user.userId,

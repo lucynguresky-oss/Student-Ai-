@@ -1,87 +1,63 @@
-import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { NestFactory, Reflector } from '@nestjs/core';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AppModule } from './app.module';
-import { SocketIoAdapter } from './messages/socket-io.adapter';
-import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor';
-import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
-import { validateEnv } from './common/env.validation';
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
-async function bootstrap() {
-  // Validate env before anything else — fails fast if misconfigured
-  const env = validateEnv();
-
+async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: env.NODE_ENV === 'development' }),
+    new FastifyAdapter(),
   );
 
-  // Global prefix
-  app.setGlobalPrefix('v1');
+  const config = app.get(ConfigService);
 
-  // CORS
-  app.enableCors({
-    origin: [
-      'http://localhost:3000', // web
-      'http://localhost:3001', // admin
-      'http://localhost:8081', // expo
-    ],
-    credentials: true,
-  });
+  app.setGlobalPrefix('api');
 
-  // WebSocket adapter — Socket.io on a standalone port (4001)
-  app.useWebSocketAdapter(new SocketIoAdapter(app));
+  // --- CORS: allow only configured origins (or all in development) ---
+  const allowedOrigins = config.get<string>('cors.origins');
+  const origins = allowedOrigins
+    ? allowedOrigins.split(',').map((o) => o.trim())
+    : true; // fall back to wildcard in dev (no env var set)
+  app.enableCors({ origin: origins, credentials: true });
 
-  // Global response envelope interceptor (§1)
-  app.useGlobalInterceptors(new EnvelopeInterceptor());
+  // --- Global guards ---
+  const reflector = app.get(Reflector);
+  app.useGlobalGuards(new ThrottlerGuard({} as any, {} as any, reflector));
 
-  // Global exception filter — structured error responses, no stack trace leaks (§1)
-  app.useGlobalFilters(new GlobalExceptionFilter());
-
-  // Global validation pipe
+  // --- Global pipes ---
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
+      whitelist: true, // strip unknown props
+      forbidNonWhitelisted: true, // 400 on unknown props
+      transform: true, // auto-cast to DTO types
+      transformOptions: { enableImplicitConversion: true },
     }),
   );
 
-  // Swagger / OpenAPI
-  const config = new DocumentBuilder()
-    .setTitle('Learnix API')
-    .setDescription('Learnix — Social Learning Platform for Africa')
-    .setVersion('2.0.0')
-    .addBearerAuth()
-    .addTag('health', 'Health check endpoints')
-    .addTag('auth', 'Authentication & authorization')
-    .addTag('users', 'User management')
-    .addTag('profiles', 'Profile management')
-    .addTag('posts', 'Feed & posts')
-    .addTag('learn', 'Learning engine')
-    .addTag('library', 'Digital library')
-    .addTag('papers', 'Past papers')
-    .addTag('ai', 'AI tutor')
-    .addTag('admin', 'Admin dashboard')
-    .addTag('messages', 'Real-time messaging')
-    .addTag('search', 'Search engine')
-    .addTag('taxonomy', 'Country/curriculum/level/subject taxonomy')
-    .addTag('onboarding', 'Duolingo-style onboarding flow')
-    .addTag('settings', 'Account settings & privacy')
-    .addTag('gamification', 'XP, streaks, badges, leaderboard')
-    .build();
+  // --- Global filters: convert Prisma errors to clean HTTP responses ---
+  app.useGlobalFilters(new PrismaExceptionFilter());
 
-  const document = SwaggerModule.createDocument(app, config);
+  // --- Swagger ---
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Learnix API')
+    .setDescription('Social learning platform – Instagram-style core')
+    .setVersion('0.1.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(env.PORT, '0.0.0.0');
-  console.log(`🚀 Learnix API v2.0 running on http://localhost:${env.PORT}`);
-  console.log(`📚 API docs at http://localhost:${env.PORT}/docs`);
-  console.log(`💬 WebSocket server active (Socket.io via adapter)`);
-  console.log(`🌍 Environment: ${env.NODE_ENV}`);
+  const port = config.get<number>('port') ?? 4000;
+  await app.listen(port, '0.0.0.0');
+  // eslint-disable-next-line no-console
+  console.log(`🚀 Learnix API on http://localhost:${port}  (docs: /docs)`);
 }
-bootstrap();
+
+void bootstrap();

@@ -29,6 +29,26 @@ interface Message {
   loading?: boolean;
 }
 
+// reads the SSE body and yields {type:'meta'|'delta'|'done'|'error', ...}
+async function* readSSE(res: Response) {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let i;
+    while ((i = buffer.indexOf('\n\n')) >= 0) {
+      const line = buffer.slice(0, i).trim();
+      buffer = buffer.slice(i + 2);
+      if (line.startsWith('data:')) {
+        try { yield JSON.parse(line.slice(5).trim()); } catch {}
+      }
+    }
+  }
+}
+
 function SourcePill({ source }: { source: Source }) {
   const isBook = source.type === 'book';
   return (
@@ -128,6 +148,10 @@ export default function AiTutorPage() {
   const [isPremium] = useState(false); // TODO: replace with real auth
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const conversationId = useRef<string | null>(null);
+
+  // In a real app we'd get a token from auth context
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
   const limitHit = !isPremium && msgCount >= FREE_LIMIT;
   const msgsLeft = Math.max(0, FREE_LIMIT - msgCount);
@@ -149,43 +173,63 @@ export default function AiTutorPage() {
     if (!isPremium) setMsgCount(c => c + 1);
 
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content };
-    const loadingMsg: Message = { id: 'loading', role: 'assistant', content: '', loading: true };
+    // Optimistic loading message
+    const loadingMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: '', loading: true };
 
     setMessages(m => [...m, userMsg, loadingMsg]);
     setLoading(true);
 
     try {
-      const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
-      const res = await fetch(`${API_BASE}/ai/chat`, {
+      const res = await fetch(`${API_BASE}/ai/chat/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, mode }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message: content, conversationId: conversationId.current, subject: mode }),
       });
 
       if (!res.ok) throw new Error('API error');
-      const { data } = await res.json();
-
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.content,
-        sources: data.sources,
-      };
-      setMessages(m => m.filter(x => x.id !== 'loading').concat(aiMsg));
-    } catch {
-      // Fallback response when API is down
-      const fallback: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `Great question! Let me break this down for you step by step.\n\n**Key Concept:**\nThis is one of the most commonly tested topics in KCSE. Let me explain it using the Socratic method — I'll guide you through the reasoning.\n\n**Step 1:** Start with what you already know...\nCan you tell me what you already understand about this topic? This will help me tailor my explanation to your level. 🎓`,
-        sources: [
-          { label: 'Biology Form 4 Textbook (Ch. 3)', type: 'book' },
-          { label: 'KCSE 2023 Paper 1', type: 'paper' },
-        ],
-      };
-      setMessages(m => m.filter(x => x.id !== 'loading').concat(fallback));
+      
+      let isFirstDelta = true;
+      for await (const evt of readSSE(res)) {
+        if (evt.type === 'meta') {
+          conversationId.current = evt.conversationId;
+        } else if (evt.type === 'delta') {
+          setMessages(m => {
+            const copy = [...m];
+            const last = copy[copy.length - 1];
+            if (last) {
+              if (isFirstDelta) {
+                last.loading = false;
+                isFirstDelta = false;
+              }
+              last.content += evt.text;
+            }
+            return copy;
+          });
+        } else if (evt.type === 'error') {
+          setMessages(m => {
+            const copy = [...m];
+            const last = copy[copy.length - 1];
+            if (last) {
+              last.loading = false;
+              last.content = `⚠️ ${evt.message}`;
+            }
+            return copy;
+          });
+        }
+      }
+    } catch (e) {
+      setMessages(m => {
+        const copy = [...m];
+        const last = copy[copy.length - 1];
+        if (last) {
+          last.loading = false;
+          last.content = `⚠️ Failed to connect to AI Tutor.`;
+        }
+        return copy;
+      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const currentMode = MODES.find(m => m.key === mode)!;

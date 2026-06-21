@@ -1,364 +1,194 @@
 import {
+  ConflictException,
   Injectable,
   UnauthorizedException,
-  ConflictException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { LoginRequest, SignupRequest } from '@learnix/types';
-import * as argon2 from 'argon2';
-import { v4 as uuidv4 } from 'uuid';
-import * as crypto from 'crypto';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
+import { PrismaService } from '../prisma/prisma.service';
+import { LoginDto, RegisterDto } from './dto/auth.dto';
 
-function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
+export interface Tokens {
+  accessToken: string;
+  refreshToken: string;
 }
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    private readonly jwt: JwtService,
+    private readonly config: ConfigService,
   ) {}
 
-  /** Register a new student */
-  async register(data: SignupRequest) {
-    const existingUser = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          data.email ? { email: data.email } : null,
-          data.phone ? { phone: data.phone } : null,
-        ].filter(Boolean) as any,
-      },
+  async register(dto: RegisterDto): Promise<{ user: PublicUser } & Tokens> {
+    const existing = await this.prisma.user.findFirst({
+      where: { OR: [{ email: dto.email }, { username: dto.username }] },
+      select: { email: true, username: true },
     });
-
-    if (existingUser) {
-      throw new ConflictException('User with this email or phone already exists');
+    if (existing) {
+      const field = existing.email === dto.email ? 'email' : 'username';
+      throw new ConflictException(`That ${field} is already taken`);
     }
 
-    const passwordHash = await argon2.hash(data.password, {
-      timeCost: 2,
-      memoryCost: 19456, // 19 MiB
-      parallelism: 1,
-    });
-
-    // Dynamically retrieve the STUDENT role UUID
-    let studentRole = await this.prisma.role.findUnique({
-      where: { key: 'STUDENT' },
-    });
-    if (!studentRole) {
-      studentRole = await this.prisma.role.create({
-        data: { key: 'STUDENT' },
-      });
-    }
-
-    // Create user and profile in a transaction
+    const passwordHash = await bcrypt.hash(dto.password, 12);
     const user = await this.prisma.user.create({
       data: {
-        email: data.email,
-        phone: data.phone,
+        email: dto.email,
+        username: dto.username,
+        displayName: dto.displayName,
         passwordHash,
-        ageBand: data.ageBand,
-        status: 'ACTIVE',
-        profile: {
-          create: {
-            displayName: data.displayName,
-            username: `user_${Date.now()}_${Math.floor(Math.random() * 1000)}`, // Unique temporary username
-            country: 'KE', // Default for MVP
-            curriculum: 'KCSE',
-            level: 'FORM_1',
-            subjects: [],
-            languages: ['en'],
-          },
-        },
-        roles: {
-          create: {
-            roleId: studentRole.id,
-          },
-        },
-        streak: {
-          create: {
-            currentDays: 0,
-            longestDays: 0,
-            pauseTokens: 1,
-          },
-        },
-      },
-      include: {
-        profile: true,
-        roles: true,
       },
     });
 
-    return {
-      id: user.id,
-      email: user.email,
-      displayName: user.profile?.displayName,
-      username: user.profile?.username,
-    };
+    const tokens = await this.issueTokens(user.id, user.username, user.role);
+    return { user: toPublicUser(user), ...tokens };
   }
 
-  /** Login a user and create a session */
-  async login(data: LoginRequest, ip?: string, userAgent?: string) {
+  async login(dto: LoginDto): Promise<{ user: PublicUser } & Tokens> {
     const user = await this.prisma.user.findFirst({
       where: {
-        OR: [
-          { email: data.identifier },
-          { phone: data.identifier },
-          { profile: { username: data.identifier } },
-        ],
-      },
-      include: {
-        roles: {
-          include: {
-            role: true,
-          },
-        },
+        OR: [{ email: dto.identifier }, { username: dto.identifier }],
       },
     });
+    if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    if (!user || !user.passwordHash) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    const ok = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!ok) throw new UnauthorizedException('Invalid credentials');
 
-    const isPasswordValid = await argon2.verify(user.passwordHash, data.password);
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    return this.generateTokens(user, undefined, ip, userAgent);
+    const tokens = await this.issueTokens(user.id, user.username, user.role);
+    return { user: toPublicUser(user), ...tokens };
   }
 
-  /** Refresh access & refresh tokens with RTR and reuse detection */
-  async refreshToken(refreshTokenStr: string, ip?: string, userAgent?: string) {
+  async refresh(rawToken: string): Promise<Tokens> {
+    // Verify signature/expiry first
+    let payload: { sub: string; jti: string };
     try {
-      const decoded = this.jwtService.verify(refreshTokenStr, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET', 'super-secret-refresh-key'),
+      payload = await this.jwt.verifyAsync(rawToken, {
+        secret: this.config.get<string>('jwt.refreshSecret'),
       });
-
-      const session = await this.prisma.session.findUnique({
-        where: { id: decoded.sessionId },
-      });
-
-      if (!session || session.revokedAt || session.expiresAt < new Date()) {
-        throw new UnauthorizedException('Session is expired or revoked');
-      }
-
-      const incomingHash = hashToken(refreshTokenStr);
-
-      // Check for token reuse (RTR mismatch)
-      if (incomingHash !== session.refreshHash) {
-        // Token has been reused! Revoke the entire session family for security
-        await this.prisma.session.updateMany({
-          where: { family: session.family },
-          data: { revokedAt: new Date() },
-        });
-        throw new UnauthorizedException('Refresh token reuse detected. All sessions in this family revoked.');
-      }
-
-      // Valid token! Find the user
-      const user = await this.prisma.user.findUnique({
-        where: { id: decoded.sub },
-        include: {
-          roles: {
-            include: {
-              role: true,
-            },
-          },
-        },
-      });
-
-      if (!user) {
-        throw new UnauthorizedException('User not found');
-      }
-
-      // Rotate: Update the existing session with new token and expiration
-      const roleKeys = user.roles.map((ur) => ur.role.key);
-      const payload = {
-        sub: user.id,
-        sessionId: session.id,
-        roles: roleKeys,
-        ageBand: user.ageBand,
-      };
-
-      const accessToken = this.jwtService.sign(payload);
-      
-      const newRefreshToken = this.jwtService.sign(
-        { sub: user.id, sessionId: session.id, family: session.family },
-        {
-          expiresIn: '30d',
-          secret: this.configService.get<string>('JWT_REFRESH_SECRET', 'super-secret-refresh-key'),
-        },
-      );
-
-      const newHash = hashToken(newRefreshToken);
-
-      await this.prisma.session.update({
-        where: { id: session.id },
-        data: {
-          refreshHash: newHash,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // extends by 30 days
-          ip,
-          userAgent,
-        },
-      });
-
-      return {
-        accessToken,
-        refreshToken: newRefreshToken,
-        expiresIn: 15 * 60, // 15 minutes
-      };
-    } catch (e) {
-      if (e instanceof UnauthorizedException) {
-        throw e;
-      }
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
-  }
 
-  /** Logout current session */
-  async logout(sessionId: string) {
-    await this.prisma.session.update({
-      where: { id: sessionId },
-      data: { revokedAt: new Date() },
+    // Then check it hasn't been revoked / rotated
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { id: payload.jti },
     });
-    return { success: true };
-  }
-
-  /** Logout all sessions for a user */
-  async logoutAll(userId: string) {
-    await this.prisma.session.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    return { success: true };
-  }
-
-  /** Get all active sessions for a user */
-  async getSessions(userId: string) {
-    const sessions = await this.prisma.session.findMany({
-      where: {
-        userId,
-        revokedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        device: true,
-        ip: true,
-        userAgent: true,
-        createdAt: true,
-      },
-    });
-
-    return sessions.map((s) => ({
-      id: s.id,
-      device: s.device,
-      ip: s.ip,
-      userAgent: s.userAgent,
-      lastActiveAt: s.createdAt.toISOString(), // simplified for MVP
-      createdAt: s.createdAt.toISOString(),
-    }));
-  }
-
-  /** Revoke a specific session of a user */
-  async revokeSession(userId: string, sessionId: string) {
-    await this.prisma.session.updateMany({
-      where: { id: sessionId, userId },
-      data: { revokedAt: new Date() },
-    });
-    return { success: true };
-  }
-
-  /** Get full user details including profile and learner profile */
-  async getUserMe(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        profile: true,
-        learnerProfile: true,
-        streak: true,
-        xpEvents: {
-          select: { amount: true },
-        },
-        roles: {
-          include: {
-            role: true,
-          },
-        },
-      },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
+    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+      throw new UnauthorizedException('Refresh token expired or revoked');
     }
+    const matches = await bcrypt.compare(rawToken, stored.tokenHash);
+    if (!matches) throw new UnauthorizedException('Invalid refresh token');
 
-    const totalXp = user.xpEvents.reduce((sum, event) => sum + event.amount, 0);
-
-    return {
-      id: user.id,
-      email: user.email,
-      phone: user.phone,
-      ageBand: user.ageBand,
-      status: user.status,
-      profile: user.profile,
-      learnerProfile: user.learnerProfile,
-      roles: user.roles.map((ur) => ur.role.key),
-      xp: totalXp,
-      streak: user.streak?.currentDays || 0,
-    };
-  }
-
-  /** Generate token pair helper */
-  private async generateTokens(user: any, family?: string, ip?: string, userAgent?: string) {
-    const roleKeys = user.roles.map((ur: any) => ur.role.key);
-    const sessionFamily = family ?? uuidv4();
-
-    // Create session record in DB first
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        family: sessionFamily,
-        refreshHash: '', // temp
-        ip,
-        userAgent,
-        device: userAgent ? userAgent.substring(0, 100) : null,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-      },
+    // Rotate: revoke the old, issue a fresh pair
+    await this.prisma.refreshToken.update({
+      where: { id: stored.id },
+      data: { revokedAt: new Date() },
     });
 
-    const payload = {
-      sub: user.id,
-      sessionId: session.id,
-      roles: roleKeys,
-      ageBand: user.ageBand,
-    };
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: payload.sub },
+      select: { id: true, username: true, role: true },
+    });
+    return this.issueTokens(user.id, user.username, user.role);
+  }
 
-    const accessToken = this.jwtService.sign(payload);
+  async logout(rawToken: string): Promise<void> {
+    try {
+      const payload = await this.jwt.verifyAsync<{ jti: string }>(rawToken, {
+        secret: this.config.get<string>('jwt.refreshSecret'),
+      });
+      await this.prisma.refreshToken.updateMany({
+        where: { id: payload.jti, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    } catch {
+      // swallow â€” logout should be idempotent
+    }
+  }
 
-    const refreshToken = this.jwtService.sign(
-      { sub: user.id, sessionId: session.id, family: sessionFamily },
+  // ---- helpers ----
+
+  private async issueTokens(
+    userId: string,
+    username: string,
+    role: string,
+  ): Promise<Tokens> {
+    const jti = randomBytes(16).toString('hex');
+
+    const accessToken = await this.jwt.signAsync(
+      { sub: userId, username, role },
       {
-        expiresIn: '30d',
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET', 'super-secret-refresh-key'),
+        secret: this.config.get<string>('jwt.accessSecret'),
+        expiresIn: this.config.get<string>('jwt.accessTtl'),
       },
     );
 
-    const refreshHash = hashToken(refreshToken);
+    const refreshTtl = this.config.get<string>('jwt.refreshTtl') ?? '7d';
+    const refreshToken = await this.jwt.signAsync(
+      { sub: userId, jti },
+      {
+        secret: this.config.get<string>('jwt.refreshSecret'),
+        expiresIn: refreshTtl,
+      },
+    );
 
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: { refreshHash },
+    await this.prisma.refreshToken.create({
+      data: {
+        id: jti,
+        userId,
+        tokenHash: await bcrypt.hash(refreshToken, 10),
+        expiresAt: new Date(Date.now() + ttlToMs(refreshTtl)),
+      },
     });
 
-    return {
-      accessToken,
-      refreshToken,
-      expiresIn: 15 * 60, // 15 minutes
-    };
+    return { accessToken, refreshToken };
   }
+}
+
+// ---------------------------------------------------------------------------
+// View-model helpers
+// ---------------------------------------------------------------------------
+
+export interface PublicUser {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  role: string;
+  xp: number;
+  streakCount: number;
+}
+
+function toPublicUser(u: {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  role: string;
+  xp: number;
+  streakCount: number;
+}): PublicUser {
+  return {
+    id: u.id,
+    username: u.username,
+    displayName: u.displayName,
+    avatarUrl: u.avatarUrl,
+    role: u.role,
+    xp: u.xp,
+    streakCount: u.streakCount,
+  };
+}
+
+/** very small TTL parser: 15m, 7d, 24h, 30s */
+function ttlToMs(ttl: string): number {
+  const match = /^(\d+)([smhd])$/.exec(ttl.trim());
+  if (!match) return 7 * 24 * 60 * 60 * 1000;
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  const mult = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[unit]!;
+  return value * mult;
 }

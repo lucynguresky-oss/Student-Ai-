@@ -1,0 +1,542 @@
+// Learnix — Prisma schema
+// Instagram-style social core + learning hooks (XP/streaks/curriculum)
+// Postgres 16 + pgvector. Run: pnpm db:generate && pnpm db:migrate
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  LEARNER
+  CREATOR
+  TEACHER
+  ADMIN
+}
+
+enum PostType {
+  IMAGE
+  CAROUSEL
+  VIDEO
+  REEL
+}
+
+enum Visibility {
+  PUBLIC
+  FOLLOWERS
+  PRIVATE
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum FollowStatus {
+  ACCEPTED
+  PENDING // used when the target account is private
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  REPLY
+  FOLLOW
+  FOLLOW_REQUEST
+  MENTION
+  MODERATION // system warning, e.g. a post was removed
+}
+
+// ---------------------------------------------------------------------------
+// Users & identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  displayName  String?
+  bio          String?  @db.Text
+  avatarUrl    String?
+  role         Role     @default(LEARNER)
+  isPrivate    Boolean  @default(false)
+  isVerified   Boolean  @default(false)
+
+  // Learning / gamification hooks (Duolingo-style loop lives on top of these)
+  xp             Int       @default(0)
+  streakCount    Int       @default(0)
+  lastActiveDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  posts         Post[]
+  comments      Comment[]
+  likes         Like[]
+  commentLikes  CommentLike[]
+  bookmarks     Bookmark[]
+  collections   Collection[]
+  refreshTokens RefreshToken[]
+
+  following Follow[] @relation("Follower")
+  followers Follow[] @relation("Following")
+
+  notifications     Notification[] @relation("Recipient")
+  actedNotifications Notification[] @relation("Actor")
+
+  // Messaging & calls
+  conversations  ConversationParticipant[]
+  sentMessages   Message[]
+  initiatedCalls CallLog[]
+
+  // Stories, safety
+  stories     Story[]
+  storyViews  StoryView[]
+  blocking    Block[]  @relation("Blocker")
+  blockedBy   Block[]  @relation("Blocked")
+  reportsMade Report[] @relation("Reporter")
+  mentionedIn PostMention[]
+  aiConversations AiConversation[]
+
+  @@index([username])
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String // hash of the refresh token (never store the raw token)
+  userAgent String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Social graph
+// ---------------------------------------------------------------------------
+
+model Follow {
+  followerId  String
+  followingId String
+  follower    User         @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User         @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  status      FollowStatus @default(ACCEPTED)
+  createdAt   DateTime     @default(now())
+
+  @@id([followerId, followingId])
+  @@index([followingId, status])
+  @@index([followerId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Content
+// ---------------------------------------------------------------------------
+
+model Post {
+  id         String     @id @default(cuid())
+  authorId   String
+  author     User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  type       PostType   @default(IMAGE)
+  caption    String?    @db.Text
+  visibility Visibility @default(PUBLIC)
+
+  // Optional curriculum tie-in — Learnix's differentiator over a plain IG clone
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  // Denormalised counters (kept in sync in service layer for cheap reads)
+  likeCount    Int @default(0)
+  commentCount Int @default(0)
+  saveCount    Int @default(0)
+  viewCount    Int @default(0)
+
+  // AI moderation — every post is screened for educational value on create.
+  // Non-educational posts are REMOVED (hidden from feeds) and the author warned.
+  moderationStatus ModerationStatus @default(PENDING)
+  moderationReason String?          @db.Text
+  moderatedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  media          MediaAsset[]
+  likes          Like[]
+  comments       Comment[]
+  bookmarks      Bookmark[]
+  hashtags       PostHashtag[]
+  moderationLogs ModerationLog[]
+  mentions       PostMention[]
+
+  @@index([authorId, createdAt])
+  @@index([visibility, createdAt])
+  @@index([moderationStatus, createdAt])
+  @@index([subjectId])
+}
+
+model MediaAsset {
+  id           String    @id @default(cuid())
+  postId       String
+  post         Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  type         MediaType
+  url          String
+  thumbnailUrl String?
+  blurhash     String? // for instant low-res placeholders (good on slow connections)
+  width        Int?
+  height       Int?
+  durationSec  Float? // for VIDEO/REEL
+  position     Int       @default(0) // ordering within a carousel
+
+  @@index([postId, position])
+}
+
+model Like {
+  userId    String
+  postId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, postId])
+  @@index([postId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String   @db.Text
+  parentId  String? // self-relation for threaded replies
+  parent    Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("CommentReplies")
+  likeCount Int      @default(0)
+  createdAt DateTime @default(now())
+
+  commentLikes CommentLike[]
+
+  @@index([postId, createdAt])
+  @@index([parentId])
+}
+
+model CommentLike {
+  userId    String
+  commentId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, commentId])
+}
+
+model Collection {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime   @default(now())
+  bookmarks Bookmark[]
+
+  @@unique([userId, name])
+}
+
+model Bookmark {
+  userId       String
+  postId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post         Post        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  collectionId String?
+  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+
+  @@id([userId, postId])
+  @@index([userId, createdAt])
+}
+
+model Hashtag {
+  id        String        @id @default(cuid())
+  tag       String        @unique
+  createdAt DateTime      @default(now())
+  posts     PostHashtag[]
+}
+
+model PostHashtag {
+  postId    String
+  hashtagId String
+  post      Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  hashtag   Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, hashtagId])
+  @@index([hashtagId])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String // recipient
+  user      User             @relation("Recipient", fields: [userId], references: [id], onDelete: Cascade)
+  actorId   String? // who triggered it (null for system/moderation notices)
+  actor     User?            @relation("Actor", fields: [actorId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  postId    String?
+  commentId String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Curriculum (Learnix-specific; lightweight here, expand later)
+// ---------------------------------------------------------------------------
+
+model Subject {
+  id        String   @id @default(cuid())
+  name      String   @unique // e.g. "Biology", "Mathematics"
+  level     String? // e.g. "KCSE", "CBC", "University"
+  createdAt DateTime @default(now())
+  posts     Post[]
+}
+
+// ---------------------------------------------------------------------------
+// AI moderation
+// ---------------------------------------------------------------------------
+
+enum ModerationStatus {
+  PENDING // awaiting AI screen (or screen failed / no API key in dev)
+  APPROVED // educational — visible in feeds
+  FLAGGED // borderline — hidden pending human review
+  REMOVED // non-educational — hidden, author warned
+}
+
+model ModerationLog {
+  id            String           @id @default(cuid())
+  postId        String
+  post          Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  isEducational Boolean
+  confidence    Float // 0..1 from the classifier
+  category      String? // e.g. "spam", "off-topic", "educational:biology"
+  reason        String           @db.Text
+  action        ModerationStatus // what the system decided
+  model         String // which model produced the verdict
+  createdAt     DateTime         @default(now())
+
+  @@index([postId])
+}
+
+// ---------------------------------------------------------------------------
+// Messaging & calls
+// ---------------------------------------------------------------------------
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  POST_SHARE
+}
+
+enum CallType {
+  AUDIO
+  VIDEO
+}
+
+enum CallStatus {
+  RINGING
+  ONGOING
+  ENDED
+  MISSED
+  DECLINED
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  isGroup   Boolean  @default(false)
+  title     String? // group name (null for 1:1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+  calls        CallLog[]
+}
+
+model ConversationParticipant {
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  joinedAt       DateTime     @default(now())
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  type           MessageType  @default(TEXT)
+  body           String?      @db.Text
+  mediaUrl       String?
+  postId         String? // when sharing a post into a chat
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model CallLog {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  initiatorId    String
+  initiator      User         @relation(fields: [initiatorId], references: [id], onDelete: Cascade)
+  type           CallType
+  status         CallStatus   @default(RINGING)
+  startedAt      DateTime     @default(now())
+  endedAt        DateTime?
+
+  @@index([conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// Stories (ephemeral 24h content)
+// ---------------------------------------------------------------------------
+
+model Story {
+  id           String      @id @default(cuid())
+  authorId     String
+  author       User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  type         MediaType   @default(IMAGE)
+  mediaUrl     String
+  thumbnailUrl String?
+  blurhash     String?
+  durationSec  Float?
+  caption      String?
+  createdAt    DateTime    @default(now())
+  expiresAt    DateTime // typically createdAt + 24h
+  views        StoryView[]
+
+  @@index([authorId, expiresAt])
+  @@index([expiresAt])
+}
+
+model StoryView {
+  storyId  String
+  story    Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  viewerId String
+  viewer   User     @relation(fields: [viewerId], references: [id], onDelete: Cascade)
+  viewedAt DateTime @default(now())
+
+  @@id([storyId, viewerId])
+  @@index([viewerId])
+}
+
+// ---------------------------------------------------------------------------
+// Safety: blocks & reports
+// ---------------------------------------------------------------------------
+
+model Block {
+  blockerId String
+  blockedId String
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+enum ReportTargetType {
+  POST
+  USER
+  COMMENT
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWED
+  ACTIONED
+  DISMISSED
+}
+
+model Report {
+  id             String           @id @default(cuid())
+  reporterId     String
+  reporter       User             @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType     ReportTargetType
+  postId         String?
+  reportedUserId String?
+  commentId      String?
+  reason         String
+  details        String?          @db.Text
+  status         ReportStatus     @default(OPEN)
+  createdAt      DateTime         @default(now())
+
+  @@index([status, createdAt])
+}
+
+model PostMention {
+  postId          String
+  post            Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  mentionedUserId String
+  mentionedUser   User     @relation(fields: [mentionedUserId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+
+  @@id([postId, mentionedUserId])
+  @@index([mentionedUserId])
+}
+
+// ---------------------------------------------------------------------------
+// AI Tutor (real LLM-backed chat with persisted history)
+// ---------------------------------------------------------------------------
+
+enum AiRole {
+  USER
+  ASSISTANT
+}
+
+model AiConversation {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String? // auto-derived from the first user message
+  subject   String? // optional subject context, e.g. "Biology"
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  messages  AiMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           AiRole
+  content        String         @db.Text
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
+}

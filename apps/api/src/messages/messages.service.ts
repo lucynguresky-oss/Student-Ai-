@@ -16,14 +16,14 @@ export class MessagesService {
         participants: {
           include: {
             user: {
-              include: { profile: true },
+              include: { learnerProfile: true },
             },
           },
         },
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
-          include: { sender: { include: { profile: true } } },
+          include: { sender: { include: { learnerProfile: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -38,7 +38,7 @@ export class MessagesService {
       orderBy: { createdAt: 'asc' },
       include: {
         sender: {
-          include: { profile: true },
+          include: { learnerProfile: true },
         },
       },
     });
@@ -61,7 +61,7 @@ export class MessagesService {
       },
       include: {
         sender: {
-          include: { profile: true },
+          include: { learnerProfile: true },
         },
       },
     });
@@ -72,14 +72,14 @@ export class MessagesService {
   async getOrCreateDirectConversation(user1Id: string, user2Id: string) {
     const existing = await this.prisma.conversation.findFirst({
       where: {
-        kind: 'dm',
+        isGroup: false,
         AND: [
           { participants: { some: { userId: user1Id } } },
           { participants: { some: { userId: user2Id } } },
         ],
       },
       include: {
-        participants: { include: { user: { include: { profile: true } } } },
+        participants: { include: { user: { include: { learnerProfile: true } } } },
       },
     });
 
@@ -87,13 +87,13 @@ export class MessagesService {
 
     const newConversation = await this.prisma.conversation.create({
       data: {
-        kind: 'dm',
+        isGroup: false,
         participants: {
           create: [{ userId: user1Id }, { userId: user2Id }],
         },
       },
       include: {
-        participants: { include: { user: { include: { profile: true } } } },
+        participants: { include: { user: { include: { learnerProfile: true } } } },
       },
     });
 

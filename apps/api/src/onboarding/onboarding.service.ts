@@ -1,7 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaxonomyService } from '../taxonomy/taxonomy.service';
-import { OnboardingStepOption } from '@learnix/types';
+export interface OnboardingStepOption {
+  value: string;
+  label: string;
+  icon?: string;
+  sublabel?: string;
+  isDefault?: boolean;
+}
 
 interface StepConfig {
   id: string;
@@ -152,14 +158,13 @@ export class OnboardingService {
           value: l.code,
           label: l.nativeName,
           sublabel: l.englishName,
-          icon: l.rtl ? '↩' : undefined,
         }));
       } else if (step.id === 'country') {
         const countries = await this.taxonomy.getCountries();
         step.options = countries.map((c) => ({
           value: c.id,
           label: c.name,
-          icon: c.flag,
+          icon: c.flag ?? undefined,
         }));
       } else if (step.id === 'curriculum' && learner?.countryId) {
         const curricula = await this.taxonomy.getCurricula(learner.countryId);
