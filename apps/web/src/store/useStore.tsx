@@ -103,31 +103,11 @@ const DEFAULT_USER: User = {
   isPrivate: true,
 };
 
-const MOCK_CONVERSATIONS: Conversation[] = [
-  { id: 'c1', participantIds: ['u_amina', 'u_omondi'], participantName: 'Mr. Omondi', participantSeed: 'omondi', lastMessage: 'Check out this biology clip!', lastTimestamp: Date.now() - 1000 * 60 * 5, unreadCount: 2 },
-  { id: 'c2', participantIds: ['u_amina', 'u_chem'], participantName: 'ChemDaily KE', participantSeed: 'chem', lastMessage: 'Thanks for the notes 🔥', lastTimestamp: Date.now() - 1000 * 60 * 60, unreadCount: 0 },
-  { id: 'c3', participantIds: ['u_amina', 'u_wanjiku'], participantName: 'Faith Wanjiku', participantSeed: 'faith', lastMessage: 'Study group tomorrow?', lastTimestamp: Date.now() - 1000 * 60 * 60 * 3, unreadCount: 1 },
-];
+const MOCK_CONVERSATIONS: Conversation[] = [];
 
-const MOCK_MESSAGES: Record<string, Message[]> = {
-  c1: [
-    { id: 'm1', conversationId: 'c1', senderId: 'u_omondi', text: 'pov: you opened a website and accidentally started understanding physics???', timestamp: Date.now() - 1000 * 60 * 10, read: true },
-    { id: 'm2', conversationId: 'c1', senderId: 'u_omondi', text: 'HOW TO MASTER TRIVELA PASS IN FC26', timestamp: Date.now() - 1000 * 60 * 8, read: true },
-    { id: 'm3', conversationId: 'c1', senderId: 'u_amina', text: 'Hy', timestamp: Date.now() - 1000 * 60 * 3, read: true },
-  ],
-  c2: [
-    { id: 'm4', conversationId: 'c2', senderId: 'u_chem', text: 'Thanks for the notes 🔥', timestamp: Date.now() - 1000 * 60 * 60, read: true },
-  ],
-  c3: [
-    { id: 'm5', conversationId: 'c3', senderId: 'u_wanjiku', text: 'Study group tomorrow?', timestamp: Date.now() - 1000 * 60 * 60 * 3, read: false },
-  ],
-};
+const MOCK_MESSAGES: Record<string, Message[]> = {};
 
-const MOCK_NOTIFICATIONS = [
-  { id: 'n1', text: 'Mr. Omondi liked your post', read: false, timestamp: Date.now() - 1000 * 60 * 5 },
-  { id: 'n2', text: 'ChemDaily KE started following you', read: false, timestamp: Date.now() - 1000 * 60 * 20 },
-  { id: 'n3', text: 'You earned the 🔥 15-Day Streak badge!', read: true, timestamp: Date.now() - 1000 * 60 * 60 },
-];
+const MOCK_NOTIFICATIONS: Array<{ id: string; text: string; read: boolean; timestamp: number }> = [];
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 const StoreContext = createContext<LearnixStore | null>(null);

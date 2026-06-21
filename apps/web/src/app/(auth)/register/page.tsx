@@ -3,16 +3,38 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
+import { apiFetch } from '@/lib/api';
+
 export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
-    // TODO: Connect to backend API
-    setTimeout(() => {
+    setError(null);
+    
+    const formData = new FormData(e.currentTarget);
+    const displayName = formData.get('displayName') as string;
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    // Derive a simple username from display name for now
+    const username = displayName.toLowerCase().replace(/[^a-z0-9]/g, '') + Math.floor(Math.random() * 1000);
+
+    try {
+      const res = await apiFetch('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ displayName, email, username, password }),
+      });
+      // Registration successful, log them in or redirect to login
+      const tokens = res.data;
+      localStorage.setItem('learnix_access_token', tokens.accessToken);
+      localStorage.setItem('learnix_refresh_token', tokens.refreshToken);
       window.location.href = '/feed';
-    }, 1000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to create account');
+      setLoading(false);
+    }
   };
 
   return (
@@ -25,12 +47,18 @@ export default function RegisterPage() {
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {error && (
+          <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#EF4444', fontSize: '13px', fontWeight: 500 }}>
+            {error}
+          </div>
+        )}
         <div>
           <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
             Full Name
           </label>
           <input
             type="text"
+            name="displayName"
             className="glass"
             style={{
               width: '100%', padding: '0.75rem 1rem', borderRadius: '0.5rem',
@@ -48,6 +76,7 @@ export default function RegisterPage() {
           </label>
           <input
             type="email"
+            name="email"
             className="glass"
             style={{
               width: '100%', padding: '0.75rem 1rem', borderRadius: '0.5rem',
@@ -65,6 +94,7 @@ export default function RegisterPage() {
           </label>
           <input
             type="password"
+            name="password"
             className="glass"
             style={{
               width: '100%', padding: '0.75rem 1rem', borderRadius: '0.5rem',
