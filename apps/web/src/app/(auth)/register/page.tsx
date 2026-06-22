@@ -42,9 +42,27 @@ export default function RegisterPage() {
       <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', textAlign: 'center' }}>
         Create an account
       </h2>
-      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', textAlign: 'center', marginBottom: '2rem' }}>
+      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', textAlign: 'center', marginBottom: '1.5rem' }}>
         Join thousands of students learning smarter
       </p>
+
+      {/* OAuth Buttons */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem' }}>
+        <a href="http://localhost:4000/api/auth/google" className="btn-outline" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none', color: 'var(--text)', border: '1px solid var(--color-border)', padding: '0.75rem', borderRadius: '0.5rem' }}>
+          <img src="https://authjs.dev/img/providers/google.svg" alt="Google" style={{ width: '18px' }} />
+          Google
+        </a>
+        <a href="http://localhost:4000/api/auth/github" className="btn-outline" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none', color: 'var(--text)', border: '1px solid var(--color-border)', padding: '0.75rem', borderRadius: '0.5rem' }}>
+          <img src="https://authjs.dev/img/providers/github.svg" alt="GitHub" style={{ width: '18px', filter: 'invert(1)' }} />
+          GitHub
+        </a>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '0 0 1.5rem 0', color: 'var(--text3)', fontSize: '13px' }}>
+        <div style={{ flex: 1, height: '1px', background: 'var(--color-border)' }} />
+        OR
+        <div style={{ flex: 1, height: '1px', background: 'var(--color-border)' }} />
+      </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {error && (

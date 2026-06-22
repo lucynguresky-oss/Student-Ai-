@@ -97,6 +97,18 @@ export default function LoginPage() {
           <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
         </div>
 
+        {/* OAuth Buttons */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+          <a href="http://localhost:4000/api/auth/google" className="btn-outline" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none', color: 'var(--text)' }}>
+            <img src="https://authjs.dev/img/providers/google.svg" alt="Google" style={{ width: '18px' }} />
+            Google
+          </a>
+          <a href="http://localhost:4000/api/auth/github" className="btn-outline" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', textDecoration: 'none', color: 'var(--text)' }}>
+            <img src="https://authjs.dev/img/providers/github.svg" alt="GitHub" style={{ width: '18px', filter: 'invert(1)' }} />
+            GitHub
+          </a>
+        </div>
+
         {/* Demo Accounts Section */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>Quick Demo Access</p>

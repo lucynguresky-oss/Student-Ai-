@@ -544,11 +544,13 @@ enum CallStatus {
 }
 
 model Conversation {
-  id        String   @id @default(cuid())
-  isGroup   Boolean  @default(false)
-  title     String? // group name (null for 1:1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  isGroup     Boolean  @default(false)
+  isPublic    Boolean  @default(false) // For public study rooms
+  title       String?  // group name (null for 1:1)
+  description String?  // topic description for study rooms
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   participants ConversationParticipant[]
   messages     Message[]

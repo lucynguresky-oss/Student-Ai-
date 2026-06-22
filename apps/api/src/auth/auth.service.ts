@@ -62,6 +62,41 @@ export class AuthService {
     return { user: toPublicUser(user), ...tokens };
   }
 
+  async validateOAuthUser(profile: { provider: string, providerId: string, email: string, displayName: string, photoUrl?: string, username?: string }): Promise<{ user: PublicUser } & Tokens> {
+    // Check if user exists by email
+    let user = await this.prisma.user.findUnique({
+      where: { email: profile.email },
+    });
+
+    if (!user) {
+      // Create new user
+      const baseUsername = profile.username || profile.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+      let username = baseUsername;
+      let counter = 1;
+      
+      // Ensure unique username
+      while (await this.prisma.user.findUnique({ where: { username } })) {
+        username = `${baseUsername}${counter}`;
+        counter++;
+      }
+
+      // Generate random password for OAuth users (they shouldn't login via password anyway unless they reset it)
+      const passwordHash = await bcrypt.hash(randomBytes(16).toString('hex'), 12);
+      
+      user = await this.prisma.user.create({
+        data: {
+          email: profile.email,
+          username,
+          displayName: profile.displayName,
+          passwordHash,
+        },
+      });
+    }
+
+    const tokens = await this.issueTokens(user.id, user.username, user.role);
+    return { user: toPublicUser(user), ...tokens };
+  }
+
   async refresh(rawToken: string): Promise<Tokens> {
     // Verify signature/expiry first
     let payload: { sub: string; jti: string };

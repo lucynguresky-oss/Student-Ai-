@@ -115,6 +115,16 @@ export default function MessagesPage() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* Conversation List */}
         <div style={{ width: activeConvId ? 0 : '100%', flex: activeConvId ? '0 0 0' : '0 0 100%', overflowY: 'auto', borderRight: '1px solid var(--border)', transition: 'all 0.2s' }}>
+          {/* Study Hubs Link */}
+          <Link href="/study-hubs" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'rgba(59,130,246,0.1)', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'white' }}>
+            <div style={{ width: 40, height: 40, borderRadius: '12px', background: 'var(--grad)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🤝</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>Study Hubs</div>
+              <div style={{ fontSize: 12, color: 'var(--text2)' }}>Join public group chats</div>
+            </div>
+            <div style={{ marginLeft: 'auto', color: '#3B82F6' }}>→</div>
+          </Link>
+
           {/* Search bar */}
           <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', borderRadius: 12, padding: '8px 12px', border: '1px solid var(--border)' }}>

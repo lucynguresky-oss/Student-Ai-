@@ -6,6 +6,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   AuthUser,
@@ -45,6 +46,27 @@ export class AuthController {
   @HttpCode(204)
   logout(@Body() dto: RefreshDto) {
     return this.auth.logout(dto.refreshToken);
+  }
+
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth() {}
+
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleAuthRedirect(@CurrentUser() user: any) {
+    // Return tokens or redirect to frontend
+    return user;
+  }
+
+  @Get('github')
+  @UseGuards(AuthGuard('github'))
+  async githubAuth() {}
+
+  @Get('github/callback')
+  @UseGuards(AuthGuard('github'))
+  async githubAuthRedirect(@CurrentUser() user: any) {
+    return user;
   }
 
   @Get('me')
