@@ -1,6 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { apiFetch } from '@/lib/api';
 
 const PERIODS = ['Today', 'This Week', 'This Month', 'All Time'];
 const SUBJECTS_FILTER = ['Overall', 'Biology', 'Chemistry', 'Physics', 'Mathematics', 'English'];
@@ -57,10 +58,35 @@ export default function LeaderboardPage() {
   const [period, setPeriod] = useState('This Week');
   const [subjectFilter, setSubjectFilter] = useState('Overall');
   const [showBadgeDetail, setShowBadgeDetail] = useState<Badge | null>(null);
+  const [leaders, setLeaders] = useState<LeaderEntry[]>(LEADERS);
+  const [loading, setLoading] = useState(true);
 
-  const you = LEADERS.find(l => l.isYou)!;
-  const top3 = LEADERS.slice(0, 3);
-  const rest = LEADERS.slice(3);
+  useEffect(() => {
+    apiFetch('/gamification/leaderboard')
+      .then(data => {
+        const formatted = data.map((d: any, i: number) => ({
+          rank: i + 1,
+          name: d.displayName || d.username,
+          school: 'Learnix Academy',
+          seed: d.username,
+          xp: d.xp,
+          streak: 1,
+          change: 'same',
+          isYou: i === 0, // Mock current user for demo
+        }));
+        if (formatted.length > 0) {
+          setLeaders(formatted);
+        }
+        setLoading(false);
+      })
+      .catch(console.error);
+  }, []);
+
+  if (loading) return <div style={{ color: 'white', padding: 20 }}>Loading leaderboard...</div>;
+
+  const you = leaders.find(l => l.isYou) || leaders[0];
+  const top3 = leaders.slice(0, 3);
+  const rest = leaders.slice(3);
 
   const medalColors: Record<number, { bg: string; border: string; text: string }> = {
     1: { bg: 'linear-gradient(135deg,#FFD700,#FFA500)', border: '#FFD700', text: '#000' },

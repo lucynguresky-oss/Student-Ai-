@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { MediaType } from '@prisma/client';
@@ -66,6 +67,9 @@ export class StoriesController {
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateStoryDto) {
+    if (user.role !== 'ADMIN' && user.role !== 'TEACHER') {
+      throw new ForbiddenException('Only verified educators can post Stories/Bites');
+    }
     return this.stories.create(user.id, dto);
   }
 

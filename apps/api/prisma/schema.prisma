@@ -112,6 +112,8 @@ model User {
   badges        UserBadge[]
   topicMastery  TopicMastery[]
   aiConversations AiConversation[]
+  flashcardDecks  FlashcardDeck[]
+  studySessions   StudySession[]
 
   // Stories, safety
   stories     Story[]
@@ -334,6 +336,8 @@ model Subject {
   aliases            CurriculumSubjectAlias[]
   topics             Topic[]
   learningPaths      LearningPath[]
+  flashcardDecks     FlashcardDeck[]
+  studySessions      StudySession[]
 }
 
 model CurriculumSubjectAlias {
@@ -865,4 +869,51 @@ model PostMention {
 
   @@id([postId, mentionedUserId])
   @@index([mentionedUserId])
+}
+
+// ---------------------------------------------------------------------------
+// Study Tools (Flashcards & Pomodoro)
+// ---------------------------------------------------------------------------
+
+model FlashcardDeck {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?  @db.Text
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  flashcards  Flashcard[]
+
+  @@index([userId, createdAt])
+}
+
+model Flashcard {
+  id          String         @id @default(cuid())
+  deckId      String
+  deck        FlashcardDeck  @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  front       String         @db.Text
+  back        String         @db.Text
+  orderIndex  Int            @default(0)
+  createdAt   DateTime       @default(now())
+  
+  @@index([deckId])
+}
+
+model StudySession {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  durationSec Int
+  focusRating Int?     // 1-5 scale rating of how focused they were
+  notes       String?  @db.Text
+  startedAt   DateTime @default(now())
+  endedAt     DateTime @default(now())
+
+  @@index([userId, startedAt])
 }

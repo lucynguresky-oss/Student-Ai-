@@ -253,8 +253,14 @@ export default function AiTutorPage() {
           </div>
         </div>
 
-        {/* Mode selector */}
-        <div style={{ position: 'relative' }}>
+        {/* Actions & Mode selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+          {messages.length > 0 && (
+            <Link href="/flashcards" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', background: 'linear-gradient(135deg, rgba(16,185,129,0.1), rgba(16,185,129,0.2))', borderRadius: '10px', fontSize: '13px', fontWeight: 600, color: '#10b981', border: '1px solid rgba(16,185,129,0.3)', textDecoration: 'none' }}>
+              <span>🗂️</span> Flashcards
+            </Link>
+          )}
+
           <button onClick={() => setShowModeMenu(m => !m)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', background: 'var(--surface)', borderRadius: '10px', fontSize: '13px', fontWeight: 600, color: 'var(--text2)', border: '1px solid var(--border)' }}>
             <span>{currentMode.emoji}</span>
             {currentMode.label}

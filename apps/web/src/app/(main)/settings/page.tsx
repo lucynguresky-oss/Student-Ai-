@@ -156,6 +156,7 @@ export default function SettingsPage() {
     {
       title: 'How you use Learnix',
       items: [
+        { icon: '📈', label: 'Study Analytics', sub: 'View your Pomodoro focus stats', href: '/analytics' },
         { icon: '🔖', label: 'Saved', sub: 'View your saved posts and collections', href: '/settings/saved' },
         { icon: '🕐', label: 'Archive', sub: 'View archived posts and stories', action: () => setShowArchive(true) },
         { icon: '📊', label: 'Your activity', sub: 'Time spent, interactions, links visited', href: '/settings/activity' },

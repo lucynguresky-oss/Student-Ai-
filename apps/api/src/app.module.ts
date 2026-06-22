@@ -18,6 +18,9 @@ import { StoriesModule } from './stories/stories.module';
 import { SafetyModule } from './safety/safety.module';
 import { SavedModule } from './saved/saved.module';
 import { AiTutorModule } from './ai-tutor/ai-tutor.module';
+import { FlashcardsModule } from './flashcards/flashcards.module';
+import { StudySessionsModule } from './study-sessions/study-sessions.module';
+import { GamificationModule } from './gamification/gamification.module';
 
 @Module({
   imports: [
@@ -59,6 +62,9 @@ import { AiTutorModule } from './ai-tutor/ai-tutor.module';
 
     // AI Tutor
     AiTutorModule,
+    FlashcardsModule,
+    StudySessionsModule,
+    GamificationModule,
 
     // Social parity
     StoriesModule,

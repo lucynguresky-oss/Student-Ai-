@@ -553,8 +553,8 @@ export default function FeedPage() {
 
   const loggedInUserSeed = authUser?.username?.split('.')[0] || 'default';
 
-  const STORIES = [
-    { id: 's0', name: 'Your Story', seed: loggedInUserSeed, isYou: true },
+  const DAILY_BITES = [
+    { id: 's0', name: 'Your Bite', seed: loggedInUserSeed, isYou: true },
     { id: 's1', name: 'sci.with.sam', seed: 'sci', hasNew: true },
     { id: 's2', name: 'brian.codes', seed: 'brian', hasNew: true },
     { id: 's3', name: 'kevin.creates', seed: 'kevin', hasNew: false },
@@ -678,9 +678,9 @@ export default function FeedPage() {
         ))}
       </div>
 
-      {/* Stories */}
+      {/* Daily Bites */}
       <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '12px 16px', borderBottom: '1px solid var(--border)', scrollbarWidth: 'none' }}>
-        {STORIES.map(s => (
+        {DAILY_BITES.map(s => (
           <Link key={s.id} href="/stories" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, textDecoration: 'none', flexShrink: 0 }}>
             <div style={{ width: 62, height: 62, borderRadius: '50%', border: `2.5px solid ${s.hasNew ? '#E1306C' : s.isYou ? '#18D6C8' : 'rgba(255,255,255,0.15)'}`, padding: 2, position: 'relative' }}>
               <div style={{ width: '100%', height: '100%', borderRadius: '50%', border: '2px solid var(--bg)', overflow: 'hidden' }}>
