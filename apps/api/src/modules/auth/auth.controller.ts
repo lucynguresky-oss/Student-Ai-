@@ -16,6 +16,7 @@ import { AuthService } from './auth.service';
 import { RecoveryService } from './recovery.service';
 import { OAuthService } from './oauth.service';
 import { TokenService } from '../../core/tokens/token.service';
+import { PrismaService } from '../../core/prisma/prisma.service';
 import { AuthGuard, Public } from '../../core/tokens/auth.guard';
 import { RateLimitGuard, RateLimit, RateLimits } from '../../core/rate-limit/rate-limit.guard';
 import { CurrentUser, deviceContextFrom, zodBody, type AuthedUser } from '../../core/http/request-context';
@@ -231,13 +232,23 @@ export class AuthController {
 @Controller('verify')
 @UseGuards(AuthGuard, RateLimitGuard)
 export class VerifyController {
-  constructor(private readonly recovery: RecoveryService) {}
+  constructor(
+    private readonly recovery: RecoveryService,
+    private readonly auth: AuthService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post('email/send')
-  async sendEmail(@CurrentUser() user: AuthedUser, @Req() _req: FastifyRequest) {
-    // Re-send verification to the user's current email.
-    // (AuthService.sendEmailVerification is reused via recovery in the real wiring.)
-    return { ok: true, userId: user.userId };
+  async sendEmail(@CurrentUser() user: AuthedUser) {
+    const userDb = await this.prisma.user.findUniqueOrThrow({
+      where: { id: user.userId },
+      select: { email: true },
+    });
+    if (!userDb.email) {
+      throw AppException.badRequest(ERROR_CODES.VALIDATION_ERROR, 'No email on file');
+    }
+    await this.auth.sendEmailVerification(user.userId, userDb.email);
+    return { ok: true };
   }
 
   @Public()

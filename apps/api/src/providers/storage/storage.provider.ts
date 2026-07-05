@@ -14,32 +14,46 @@ export interface PresignedUpload {
 export interface StorageProvider {
   presignPut(key: string, contentType: string, maxBytes: number): Promise<PresignedUpload>;
   publicUrl(key: string): string;
+  getObject(key: string): Promise<{ data: Buffer; contentType: string }>;
+  putObject(key: string, data: Buffer, contentType: string): Promise<void>;
 }
 
 export const STORAGE_PROVIDER = Symbol('STORAGE_PROVIDER');
 
 @Injectable()
 export class MockStorageProvider implements StorageProvider {
+  private static readonly store = new Map<string, { data: Buffer; contentType: string }>();
+
   constructor(private readonly config: ConfigService) {}
+
   async presignPut(key: string, contentType: string, _maxBytes: number): Promise<PresignedUpload> {
     return {
-      url: `${this.config.env.API_BASE_URL}/dev-upload/${encodeURIComponent(key)}`,
+      url: `${this.config.env.API_BASE_URL}/dev-upload/${key}`,
       method: 'PUT',
       key,
       headers: { 'Content-Type': contentType },
       publicUrl: this.publicUrl(key),
     };
   }
+
   publicUrl(key: string): string {
-    const base = this.config.env.STORAGE_PUBLIC_BASE_URL ?? `${this.config.env.API_BASE_URL}/media`;
+    const base = this.config.env.STORAGE_PUBLIC_BASE_URL ?? `${this.config.env.API_BASE_URL}/mock-media`;
     return `${base}/${key}`;
+  }
+
+  async getObject(key: string): Promise<{ data: Buffer; contentType: string }> {
+    const obj = MockStorageProvider.store.get(key);
+    if (!obj) throw new Error(`Object not found: ${key}`);
+    return obj;
+  }
+
+  async putObject(key: string, data: Buffer, contentType: string): Promise<void> {
+    MockStorageProvider.store.set(key, { data, contentType });
   }
 }
 
 /**
  * Cloudflare R2 adapter — DECIDED default (§15): cheap egress, S3-compatible.
- * Generates an AWS SigV4 presigned PUT URL directly (no SDK) so uploads go browser→R2,
- * never through the API (§ offloads bandwidth; see SCALE.md).
  */
 @Injectable()
 export class R2StorageProvider implements StorageProvider {
@@ -51,7 +65,7 @@ export class R2StorageProvider implements StorageProvider {
     return `${base}/${key}`;
   }
 
-  async presignPut(key: string, contentType: string, _maxBytes: number): Promise<PresignedUpload> {
+  private signUrl(method: 'GET' | 'PUT', key: string, contentType?: string): { url: string; headers: Record<string, string> } {
     const {
       STORAGE_BUCKET: bucket,
       STORAGE_ENDPOINT: endpoint,
@@ -63,11 +77,11 @@ export class R2StorageProvider implements StorageProvider {
 
     const host = new URL(endpoint).host;
     const now = new Date();
-    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, ''); // YYYYMMDDTHHMMSSZ
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
     const dateStamp = amzDate.slice(0, 8);
     const service = 's3';
     const scope = `${dateStamp}/${region}/${service}/aws4_request`;
-    const expires = 300; // 5 min
+    const expires = 300;
 
     const canonicalUri = `/${bucket}/${key}`;
     const params = new URLSearchParams({
@@ -83,7 +97,7 @@ export class R2StorageProvider implements StorageProvider {
       .join('&');
 
     const canonicalRequest = [
-      'PUT',
+      method,
       canonicalUri,
       canonicalQuery,
       `host:${host}\n`,
@@ -105,12 +119,44 @@ export class R2StorageProvider implements StorageProvider {
     const signature = createHmac('sha256', kSigning).update(stringToSign).digest('hex');
 
     const url = `${endpoint}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
+    const headers: Record<string, string> = { host };
+    if (contentType) {
+      headers['Content-Type'] = contentType;
+    }
+    return { url, headers };
+  }
+
+  async presignPut(key: string, contentType: string, _maxBytes: number): Promise<PresignedUpload> {
+    const signed = this.signUrl('PUT', key, contentType);
     return {
-      url,
+      url: signed.url,
       method: 'PUT',
       key,
-      headers: { 'Content-Type': contentType },
+      headers: signed.headers,
       publicUrl: this.publicUrl(key),
     };
+  }
+
+  async getObject(key: string): Promise<{ data: Buffer; contentType: string }> {
+    const signed = this.signUrl('GET', key);
+    const res = await fetch(signed.url, {
+      method: 'GET',
+      headers: signed.headers,
+    });
+    if (!res.ok) throw new Error(`Failed to fetch ${key}: ${res.statusText}`);
+    const arrayBuffer = await res.arrayBuffer();
+    const data = Buffer.from(arrayBuffer);
+    const contentType = res.headers.get('content-type') || 'application/octet-stream';
+    return { data, contentType };
+  }
+
+  async putObject(key: string, data: Buffer, contentType: string): Promise<void> {
+    const signed = this.signUrl('PUT', key, contentType);
+    const res = await fetch(signed.url, {
+      method: 'PUT',
+      headers: signed.headers,
+      body: data,
+    });
+    if (!res.ok) throw new Error(`Failed to upload ${key}: ${res.statusText}`);
   }
 }

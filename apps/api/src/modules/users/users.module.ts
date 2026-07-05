@@ -4,6 +4,7 @@ import type { FastifyRequest } from 'fastify';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { ProfileService } from '../profile/profile.service';
 import { AccountService } from './account.service';
+import { AvatarProcessorService } from '../profile/avatar.processor';
 import { AuthGuard, Public } from '../../core/tokens/auth.guard';
 import { RateLimitGuard, RateLimit, RateLimits } from '../../core/rate-limit/rate-limit.guard';
 import { CurrentUser, deviceContextFrom, zodBody, type AuthedUser } from '../../core/http/request-context';
@@ -125,7 +126,7 @@ export class PublicProfileController {
 @Module({
   imports: [ProvidersModule],
   controllers: [UsersController, PublicProfileController],
-  providers: [ProfileService, AccountService],
-  exports: [AccountService, ProfileService],
+  providers: [ProfileService, AccountService, AvatarProcessorService],
+  exports: [AccountService, ProfileService, AvatarProcessorService],
 })
 export class UsersModule {}

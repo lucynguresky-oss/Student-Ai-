@@ -16,6 +16,8 @@ import {
 const USERNAME_COOLDOWN_DAYS = 14;
 const USERNAME_MAX_CHANGES_PER_YEAR = 2;
 
+import { AvatarProcessorService } from './avatar.processor';
+
 @Injectable()
 export class ProfileService {
   constructor(
@@ -25,6 +27,7 @@ export class ProfileService {
     private readonly notifications: NotificationService,
     private readonly accounts: AccountService,
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+    private readonly avatars: AvatarProcessorService,
   ) {}
 
   async updateProfile(userId: string, input: UpdateProfileInput): Promise<Record<string, any> | null> {
@@ -98,8 +101,7 @@ export class ProfileService {
   }
 
   async confirmAvatar(userId: string, key: string) {
-    // In production a worker fetches the object, validates magic bytes + size, and generates
-    // 320px + 96px webp variants (§5.3). Here we record the public URL.
+    await this.avatars.queueProcessing(userId, key);
     const publicUrl = this.storage.publicUrl(key);
     await this.prisma.profile.update({ where: { userId }, data: { avatarUrl: publicUrl } });
     this.analytics.track('avatar_uploaded', { userId }, {});

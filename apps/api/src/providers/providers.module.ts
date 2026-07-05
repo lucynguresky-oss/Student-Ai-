@@ -4,6 +4,7 @@ import { ConsoleMockSmsProvider, AfricasTalkingSmsProvider, TwilioSmsProvider, H
 import { ConsoleMockEmailProvider, ResendEmailProvider, SesEmailProvider, EMAIL_PROVIDER, type EmailProvider } from './email/email.provider';
 import { MockStorageProvider, R2StorageProvider, STORAGE_PROVIDER, type StorageProvider } from './storage/storage.provider';
 import { NotificationService } from './notification.service';
+import { DevUploadController } from './storage/dev-upload.controller';
 
 // Re-export so existing imports of NotificationService from providers.module keep working.
 export { NotificationService } from './notification.service';
@@ -45,6 +46,7 @@ function storageFactory(config: ConfigService): StorageProvider {
 
 @Global()
 @Module({
+  controllers: [DevUploadController],
   providers: [
     { provide: SMS_PROVIDER, useFactory: smsFactory, inject: [ConfigService] },
     { provide: EMAIL_PROVIDER, useFactory: emailFactory, inject: [ConfigService] },
