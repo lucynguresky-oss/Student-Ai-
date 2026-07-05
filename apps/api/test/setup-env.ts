@@ -1,0 +1,14 @@
+// Test environment: real Postgres + Redis, mock external providers (SMS/email/storage).
+process.env.NODE_ENV = 'test';
+process.env.DATABASE_URL = 'postgresql://learnix:learnix_dev_2024@localhost:5433/learnix_test?schema=public';
+process.env.REDIS_URL = 'redis://localhost:6379/1';
+process.env.SMS_PROVIDER = 'mock';
+process.env.EMAIL_PROVIDER = 'mock';
+process.env.STORAGE_PROVIDER = 'mock';
+process.env.PASSWORD_PEPPER = 'test-pepper-0123456789abcdef';
+process.env.TWO_FACTOR_ENC_KEY = Buffer.from('0123456789abcdef0123456789abcdef').toString('base64');
+process.env.WEB_ORIGIN = 'http://localhost:3000';
+process.env.COOKIE_DOMAIN = 'localhost';
+process.env.JWT_KID = 'test-key';
+process.env.JWT_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCSdyBNz+liN6in\nJUBoCx9xQxqwVd19rOe23vVBc98KXdXbxDIbGbf/j2maRXaACQCp+YgwquOtdR0p\nN6L8KOruzRPtpf7wnTprjLQyX3VSC6SbTFdpceWr2GccQMB4OFE8SO5kp7D49vm+\n0HdmJztp7Y+Ze01NE6aitQBHtYzKivezY3ycmpyFVQ4G8GSWJt5oxY/7HdQJVLS2\niAecuhNaDcxsnaznIzobu6rOkLV75bl4Dlgg6JKaHmqnZBFGMjfnPMNveiAC8bMK\nwIjRFpYmm32thDIm3tDr+URoPnG2zDH6XSynhxgpdWHKDNP7WoWQsjMd2KOK9w2C\nMjOyjzfxAgMBAAECggEAEyyELpuWxnRZ4FPInDZEjfvGbSo4fkDZ7r8+ZSypmL5T\nBlunYZPa2hporTkFu9ox246erRxaBPWtdR1i+VbT9qIjRzuxZcd3g+feGTAU+EIs\n8OWsFdJCyl3glbrGV5arz9QOXV/0k4slg7zfvKBLL2FZqLKTGpGFgYxndnvGbCdV\nY+5OUDNSEd1nI4koakgdyHTjyX/3xGJAE0t15Lh+g5iXrmiDq2uX+SioPa+hR4Pa\nk4b5B+cjjHVSSMjZpE7yY6fWdKNclURBB7NhgCm+L8cNEfF2bLJcornQuyOoQq3g\nj1jZSUz9B2S0H4xeMU0FH4hYKy60/BXAPKuS4HVslwKBgQDMJtglwJHntIDXv/F7\nDz0jroM/W1abFFjUbeVgtEmkg4Ogc5kPbM7RvLmHm+EIu+sRKHIg1Bkw6mMgH74i\n9LhfdMfGndoBIqcWx++7pZQafOVpTy9/sqmNfEXDjxWKpJHPK9/lPTsQ1UD3PmBV\nekLxriZXqZTLtUVxSBivFDYIcwKBgQC3qbxIPQkC9Rk6gFYtM+LhKFA+Beh0Zlri\nIeOPZ5l/reGqQ7K4ixsmkc37j+fgdLFES69bELXL5NkfWa2G7ELJlZ1uMPNCWbHM\nWOJH5QnlHKCdgbfqDajGBa+rm7m6I6KAIZeun1OsIYCIrM9O/wjLgKHMKT1ZJXmf\nnbEJcaf5CwKBgHTaJw40007UuorDiuztJAmwcd9p4ICTfOTaolhf2WcY/9ZvVETH\n+vmCFI/SYVQme74ucGTqAiFFh8dzY9mOSZoZtd+xqn7L3ufjOQ0nEUa4Bnfooz9s\nfDBH2Ya9946L9AmpC1ajXZOc/LqIMYu7l2XOUJQMtOaEs2LL6ZUM9ICRAoGAUmOD\nAcjXfQskCRk/D0ICWcyyyk/uKiEsTdqz8UWhFySSYcXCq4RDZrbrdxjkBM10I9Xr\n0OcbFl8Pgz/AVxEvGKzUFXVB+pav6qJIx8WX/b4s0ts4/HaqKkKsvke6NiT8JYxs\nNbplV4cj2Kvkx2Qitt96NVKeoZntCEw9+aWRm2cCgYBAHYLY+CwxeiJmEb+ryY33\nUQT0xcgPDFE7vQ5KBuM1hSU+ta1WgiDAYGy2Jcmstzs3lCvgq5JJHV4O2freQV61\nI8JPcZwuCTahW8rZj0LzFYarApl6FVtZNPHYCR0sqyfizJNh+RLmwhoy8N4Y2cI8\nEaqM7odCkZFG2eH22E4GtQ==\n-----END PRIVATE KEY-----\n';
+process.env.JWT_PUBLIC_KEY = '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkncgTc/pYjeopyVAaAsf\ncUMasFXdfazntt71QXPfCl3V28QyGxm3/49pmkV2gAkAqfmIMKrjrXUdKTei/Cjq\n7s0T7aX+8J06a4y0Ml91Ugukm0xXaXHlq9hnHEDAeDhRPEjuZKew+Pb5vtB3Zic7\nae2PmXtNTROmorUAR7WMyor3s2N8nJqchVUOBvBklibeaMWP+x3UCVS0togHnLoT\nWg3MbJ2s5yM6G7uqzpC1e+W5eA5YIOiSmh5qp2QRRjI35zzDb3ogAvGzCsCI0RaW\nJpt9rYQyJt7Q6/lEaD5xtswx+l0sp4cYKXVhygzT+1qFkLIzHdijivcNgjIzso83\n8QIDAQAB\n-----END PUBLIC KEY-----\n';

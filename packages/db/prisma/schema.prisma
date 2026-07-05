@@ -1,0 +1,271 @@
+// LEARNIX — packages/db/schema.prisma
+// Implements Build Prompt §4 exactly. Field/model ADDITIONS (allowed with justification, see docs/BUILD_LOG.md):
+//   - PlacementQuestion  → §5.6 requires "5 seeded questions per track"; §4 defined no storage for them.
+//   - UserStreak         → §10 explicitly sanctions creating a minimal streak table when none exists.
+//   - Session.rotatedAt  → supports refresh-rotation bookkeeping (§5.1 token rules).
+// OTP codes live in Redis ONLY (§4) — never in Postgres. Durable audit → SecurityEvent.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountStatus {
+  ACTIVE
+  DEACTIVATED
+  PENDING_DELETION
+  BANNED
+}
+
+enum OAuthProvider {
+  GOOGLE
+  APPLE
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum VerificationPurpose {
+  VERIFY_EMAIL
+  VERIFY_PHONE
+  RESET_PASSWORD
+  LOGIN_OTP
+  TWO_FACTOR
+}
+
+enum TrackLevel {
+  NEW
+  BEGINNER
+  INTERMEDIATE
+  CONFIDENT
+}
+
+enum AgeBand {
+  UNDER_13
+  TEEN_13_17
+  ADULT_18_24
+  ADULT_25_PLUS
+}
+
+model User {
+  id                  String        @id @default(cuid())
+  username            String        @unique // stored lowercase; original casing in Profile.displayHandle
+  usernameChangedAt   DateTime?
+  usernameChangeCount Int           @default(0) // resets yearly via job
+  email               String?       @unique
+  emailVerifiedAt     DateTime?
+  phone               String?       @unique // E.164, e.g. +2547XXXXXXXX
+  phoneVerifiedAt     DateTime?
+  passwordHash        String? // null for OAuth-only or guest
+  status              AccountStatus @default(ACTIVE)
+  deletionRequestedAt DateTime?
+  isGuest             Boolean       @default(false)
+  guestDeviceId       String?       @unique // hashed device fingerprint for guest continuity
+  ageBand             AgeBand?
+  isMinor             Boolean       @default(false) // derived: UNDER_13 or TEEN_13_17
+  parentalConsentAt   DateTime? // for UNDER_13 flow
+  lastLoginAt         DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  profile        Profile?
+  oauthAccounts  OAuthAccount[]
+  sessions       Session[]
+  twoFactor      TwoFactor?
+  preferences    UserPreference?
+  onboarding     OnboardingState?
+  tracks         UserTrack[]
+  securityEvents SecurityEvent[]
+  blockedUsers   BlockedUser[]    @relation("Blocker")
+  blockedBy      BlockedUser[]    @relation("Blocked")
+  streak         UserStreak?
+}
+
+model Profile {
+  userId        String     @id
+  displayName   String?    @db.VarChar(50)
+  displayHandle String? // username with original casing
+  bio           String?    @db.VarChar(150)
+  avatarUrl     String?
+  country       String     @default("KE")
+  language      String     @default("en") // UI language: en | sw (stub sw)
+  visibility    Visibility @default(PUBLIC) // forced PRIVATE for minors
+  links         Json? // [{title, url}] max 3, validated
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OAuthAccount {
+  id                String        @id @default(cuid())
+  userId            String
+  provider          OAuthProvider
+  providerAccountId String
+  providerEmail     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  refreshTokenHash String    @unique // sha256 of the current opaque refresh token
+  prevRefreshTokenHash String? @unique // sha256 of the immediately-previous token (reuse detection)
+  tokenFamily      String // rotation family; reuse detection revokes whole family
+  deviceName       String? // parsed from UA: "Chrome on Windows"
+  deviceType       String? // web | android | ios
+  ipAddress        String?
+  userAgent        String?
+  approxLocation   String? // coarse geo from IP, e.g. "Nairobi, KE"
+  lastActiveAt     DateTime  @default(now())
+  rotatedAt        DateTime? // last refresh-rotation timestamp (addition, see header)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([tokenFamily])
+}
+
+model TwoFactor {
+  userId        String    @id
+  totpSecretEnc String // AES-256-GCM encrypted with env key
+  enabledAt     DateTime?
+  backupCodes   Json // array of {hash, usedAt}
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserPreference {
+  userId           String  @id
+  dailyGoalMinutes Int     @default(10) // 5 | 10 | 15 | 20
+  reminderTime     String? // "18:30" local
+  timezone         String  @default("Africa/Nairobi")
+  notifications    Json // {push:{streak,social,product}, email:{...}, sms:{...}}
+  theme            String  @default("system") // light | dark | system
+  contentLanguage  String  @default("en")
+  soundEffects     Boolean @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LearningTrack {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  title       String
+  description String?
+  iconUrl     String?
+  category    String // "academics" | "skills" | "languages" | ...
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users              UserTrack[]
+  placementQuestions PlacementQuestion[]
+}
+
+model UserTrack {
+  id             String     @id @default(cuid())
+  userId         String
+  trackId        String
+  level          TrackLevel @default(NEW)
+  placementScore Int? // 0-100 if placement quiz taken
+  isPrimary      Boolean    @default(false)
+  startedAt      DateTime   @default(now())
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track LearningTrack @relation(fields: [trackId], references: [id])
+
+  @@unique([userId, trackId])
+}
+
+model OnboardingState {
+  userId      String    @id
+  version     Int       @default(1) // spec version for future A/B changes
+  currentStep String    @default("welcome")
+  responses   Json      @default("{}") // {stepKey: answer} — persisted per step
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BlockedUser {
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+}
+
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      String // LOGIN_SUCCESS | LOGIN_FAILED | PASSWORD_CHANGED | 2FA_ENABLED | 2FA_DISABLED |
+  //                  SESSION_REVOKED | EMAIL_CHANGED | PHONE_CHANGED | ACCOUNT_DEACTIVATED |
+  //                  DELETION_REQUESTED | GUEST_CONVERTED | OAUTH_LINKED | OAUTH_UNLINKED
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
+// ---------- Justified additions (see file header + docs/BUILD_LOG.md) ----------
+
+model PlacementQuestion {
+  id        String     @id @default(cuid())
+  trackId   String
+  level     TrackLevel // difficulty band the question probes
+  prompt    String
+  options   Json // ["A", "B", "C", "D"]
+  answerIdx Int // index into options
+  sortOrder Int        @default(0)
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  track LearningTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([trackId, isActive])
+}
+
+model UserStreak {
+  userId           String    @id
+  current          Int       @default(0)
+  longest          Int       @default(0)
+  lastActivityDate DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

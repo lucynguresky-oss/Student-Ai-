@@ -1,57 +1,25 @@
 {
   "name": "learnix",
-  "version": "0.1.0",
   "private": true,
-  "description": "Learnix — Social Learning Platform for Africa",
-  "author": "Learnix Team",
-  "license": "UNLICENSED",
-  "engines": {
-    "node": ">=20.0.0",
-    "pnpm": ">=9.0.0"
-  },
-  "packageManager": "pnpm@10.11.0",
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
-    "dev": "turbo run dev",
     "build": "turbo run build",
+    "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:ci": "turbo run test -- --ci",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
-    "db:generate": "pnpm --filter @learnix/api prisma generate",
-    "db:migrate": "pnpm --filter @learnix/api prisma migrate dev",
-    "db:push": "pnpm --filter @learnix/api prisma db push",
-    "db:seed": "pnpm --filter @learnix/api prisma db seed",
-    "db:studio": "pnpm --filter @learnix/api prisma studio",
-    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d",
-    "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
-    "docker:reset": "docker compose -f infra/docker/docker-compose.yml down -v && docker compose -f infra/docker/docker-compose.yml up -d",
-    "clean": "turbo run clean && rimraf node_modules",
-    "prepare": "husky"
+    "test:e2e": "turbo run test:e2e",
+    "db:migrate": "pnpm --filter @learnix/db migrate:dev",
+    "db:seed": "pnpm --filter @learnix/db seed",
+    "gen:keys": "bash scripts/gen-keys.sh",
+    "openapi:export": "pnpm --filter @learnix/api openapi:export"
   },
   "devDependencies": {
-    "@commitlint/cli": "^19.0.0",
-    "@commitlint/config-conventional": "^19.0.0",
-    "husky": "^9.0.0",
-    "lint-staged": "^15.0.0",
-    "prettier": "^3.3.0",
-    "rimraf": "^6.0.0",
-    "turbo": "^2.4.0",
-    "typescript": "^5.7.0"
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3"
   },
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,md,css}": [
-      "prettier --write"
-    ]
-  },
-  "commitlint": {
-    "extends": [
-      "@commitlint/config-conventional"
-    ]
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "dotenv": "^16.4.7"
   }
 }

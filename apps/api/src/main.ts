@@ -1,63 +1,56 @@
-import { ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { NestFactory, Reflector } from '@nestjs/core';
-import {
-  FastifyAdapter,
-  NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import 'reflect-metadata';
+import { NestFactory } from '@nestjs/core';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import fastifyCookie from '@fastify/cookie';
+import fastifyHelmet from '@fastify/helmet';
+import fastifyCors from '@fastify/cors';
 import { AppModule } from './app.module';
-import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import { ConfigService } from './core/config/config.service';
 
-async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule,
-    new FastifyAdapter(),
-  );
+async function bootstrap() {
+  const adapter = new FastifyAdapter({
+    // Structured JSON logs with a request id — the base for observability at scale.
+    logger: process.env.NODE_ENV === 'production' ? { level: 'info' } : false,
+    trustProxy: true, // behind a load balancer; honour X-Forwarded-For for correct client IPs
+    genReqId: () => cryptoRandomId(),
+  });
 
+  const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
+    bufferLogs: true,
+  });
   const config = app.get(ConfigService);
 
-  app.setGlobalPrefix('api');
+  // The @fastify/* plugin type instances differ slightly from Nest's re-exported Fastify
+  // types; the registrations are correct at runtime. Cast to `any` to bridge the type gap.
+  await app.register(fastifyHelmet as any, { contentSecurityPolicy: config.isProd });
+  await app.register(fastifyCors as any, {
+    origin: [config.env.WEB_ORIGIN],
+    credentials: true, // cookies
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
+  await app.register(fastifyCookie as any);
 
-  // --- CORS: allow only configured origins (or all in development) ---
-  const allowedOrigins = config.get<string>('cors.origins');
-  const origins = allowedOrigins
-    ? allowedOrigins.split(',').map((o) => o.trim())
-    : true; // fall back to wildcard in dev (no env var set)
-  app.enableCors({ origin: origins, credentials: true });
+  app.enableShutdownHooks(); // graceful drain: onModuleDestroy closes DB/Redis/queues
 
-  // --- Global guards ---
-  const reflector = app.get(Reflector);
-  app.useGlobalGuards(new ThrottlerGuard({} as any, {} as any, reflector));
-
-  // --- Global pipes ---
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // strip unknown props
-      forbidNonWhitelisted: true, // 400 on unknown props
-      transform: true, // auto-cast to DTO types
-      transformOptions: { enableImplicitConversion: true },
-    }),
-  );
-
-  // --- Global filters: convert Prisma errors to clean HTTP responses ---
-  app.useGlobalFilters(new PrismaExceptionFilter());
-
-  // --- Swagger ---
-  const swaggerConfig = new DocumentBuilder()
+  // OpenAPI/Swagger (§2 "every endpoint registered").
+  const swagger = new DocumentBuilder()
     .setTitle('Learnix API')
-    .setDescription('Social learning platform – Instagram-style core')
+    .setDescription('Accounts Centre + Personalized Onboarding — global.')
     .setVersion('0.1.0')
+    .addCookieAuth('lx_access')
     .addBearerAuth()
     .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+  const doc = SwaggerModule.createDocument(app, swagger);
+  SwaggerModule.setup('docs', app, doc);
 
-  const port = config.get<number>('port') ?? 4000;
-  await app.listen(port, '0.0.0.0');
-  // eslint-disable-next-line no-console
-  console.log(`🚀 Learnix API on http://localhost:${port}  (docs: /docs)`);
+  await app.listen({ port: config.env.PORT, host: '0.0.0.0' });
+  new Logger('Bootstrap').log(`Learnix API on :${config.env.PORT} (docs at /docs)`);
 }
 
-void bootstrap();
+function cryptoRandomId(): string {
+  return require('node:crypto').randomBytes(8).toString('hex');
+}
+
+bootstrap();

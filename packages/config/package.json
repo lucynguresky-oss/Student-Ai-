@@ -1,0 +1,8 @@
+{
+  "name": "@learnix/config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "files": ["tsconfig.base.json", "tailwind-preset.js", "eslint.base.mjs"],
+  "scripts": { "lint": "echo config: nothing to lint", "typecheck": "echo config: ok", "build": "echo config: ok", "test": "echo config: no tests" }
+}

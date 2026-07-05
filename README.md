@@ -1,115 +1,85 @@
-# 🎓 Learnix
+# Learnix — Accounts Centre + Personalized Onboarding
 
-> A social learning operating system for African and global learners.
+Backend reference implementation for **Learnix**, a global education platform (Instagram-style
+social layer + Duolingo-style gamified learning) for a **worldwide** audience. Mascot **Lumi**;
+brand gradient teal → blue → purple.
 
-Learnix blends an Instagram-style feed, short educational videos, a Duolingo-style gamified learning loop (XP, streaks, badges, levels), a digital library, a past-papers repository, AI tutoring grounded in approved content (RAG), and creator/teacher tooling.
+This repo contains a **working, tested reference core** of the backend plus a build prompt handing
+the rest to the Antigravity coding agent. It was built to validate the hard, security-critical
+parts before generating breadth.
 
-**Initial market:** Kenya secondary and tertiary education (KCSE/CBC + university).
+## Status
 
----
+| Package | What | State |
+|---|---|---|
+| `packages/db` | Prisma schema, migrations, seed | ✅ migrated; 13 tracks, 65 placement Qs, 3 demo users |
+| `packages/validation` | Shared zod schemas, error codes, global phone, geo data | ✅ 46 unit tests pass |
+| `apps/api` | NestJS 10 + Fastify — 11 modules, 61 endpoints | ✅ compiles, builds, **18 e2e tests pass** |
+| `apps/web` | Next.js app | ⏳ deferred (see `apps/api/docs/ANTIGRAVITY_BUILD_PROMPT.md` §8) |
 
-## 🚀 Quick Start
+**Global by design:** 252 countries + 185 languages (CLDR-derived, embedded), libphonenumber-based
+phone handling, Twilio-global SMS with cost-aware African routing, RTL-ready, timezone-aware.
 
-### Prerequisites
+## Architecture
 
-- **Node.js** ≥ 20
-- **pnpm** ≥ 9
-- **Docker Desktop** (for PostgreSQL, Redis, Meilisearch)
+- **Stateless API** — all shared state in Postgres + Redis, so it scales by adding instances.
+  Details in `apps/api/docs/SCALE.md`.
+- **Security-first** — argon2id+pepper passwords, RS256 access JWTs, opaque rotating refresh tokens
+  with **family reuse-detection**, Redis-backed OTP with attempt-locking, distributed rate limits,
+  AES-GCM for TOTP secrets, enumeration-safe auth, minor safeguards. All proven by e2e tests.
+- **Validation once** — `@learnix/validation` is imported by both API and (future) web app.
 
-### 1. Clone & Install
+## Run it
+
+Prereqs: Node 22, pnpm 9, Postgres, Redis.
 
 ```bash
-git clone https://github.com/learnix/learnix.git
-cd learnix
 pnpm install
+
+# Generate keys + env
+cp .env.example .env
+bash scripts/gen-keys.sh        # writes RS256 keypair into .env
+
+# Database
+pnpm --filter @learnix/db migrate       # apply migrations
+pnpm --filter @learnix/db seed          # tracks + placement + demo users
+
+# Build shared packages
+pnpm --filter @learnix/validation build
+pnpm --filter @learnix/db build
+
+# Run the API
+pnpm --filter @learnix/api start        # http://localhost:4000, docs at /docs
 ```
 
-### 2. Start Infrastructure
+## Test
 
 ```bash
-pnpm docker:up
+# Unit (shared validation — global phone, geo, schemas, scoring)
+pnpm --filter @learnix/validation test
+
+# E2E (real Postgres + Redis; mock SMS/email/storage)
+#   attack cases, lifecycle, onboarding journey
+cd apps/api && npx jest --config test/jest-e2e.json
 ```
 
-This starts:
-- **PostgreSQL 16** (pgvector) — port 5432
-- **Redis 7** — port 6379
-- **Meilisearch** — port 7700
-- **Mailhog** — ports 1025/8025
-
-### 3. Setup Database
+## Regenerate OpenAPI
 
 ```bash
-pnpm db:generate
-pnpm db:migrate
-pnpm db:seed
+cd apps/api && npx ts-node src/openapi-export.ts   # writes docs/openapi.json (61 paths)
 ```
 
-### 4. Start Development
+## Handoff docs
 
-```bash
-pnpm dev
-```
+- `apps/api/docs/ANTIGRAVITY_BUILD_PROMPT.md` — **the build prompt for Antigravity** (canonical spec
+  for completing the full production build, global scope + scale features throughout).
+- `apps/api/docs/SCALE.md` — high-scale architecture (pooling, replicas, caching, queues, workers,
+  observability).
+- `apps/api/docs/BUILD_LOG.md` — schema additions, resolved decisions, globalization notes.
+- `apps/api/docs/openapi.json` — API contract, 61 endpoints.
 
-This boots all apps concurrently:
-- **API** → http://localhost:4000
-- **API Docs** → http://localhost:4000/docs
-- **Web** → http://localhost:3000
-- **Admin** → http://localhost:3001
-- **Mobile** → Expo DevTools
+## Tech stack
 
----
-
-## 📁 Repository Structure
-
-```
-learnix/
-├─ apps/
-│  ├─ api/         # NestJS backend (Fastify)
-│  ├─ web/         # Next.js consumer web (PWA)
-│  ├─ admin/       # Next.js admin dashboard
-│  └─ mobile/      # React Native + Expo
-├─ packages/
-│  ├─ types/       # Shared TS types & Zod schemas
-│  ├─ sdk/         # Auto-generated API client
-│  ├─ analytics/   # PostHog wrapper
-│  ├─ feature-flags/ # Feature flag wrapper
-│  └─ rag/         # RAG pipeline
-├─ services/       # Background workers (future)
-├─ infra/
-│  └─ docker/      # Docker Compose for local dev
-├─ docs/
-│  └─ adr/         # Architecture Decision Records
-└─ scripts/        # Utilities & ops scripts
-```
-
----
-
-## 🎨 Design System
-
-| Token | Value |
-|---|---|
-| Brand Gradient | `#18D6C8 → #3B82F6 → #7C3AED` |
-| Primary Font | Plus Jakarta Sans |
-| Body Font | Inter |
-| Dark BG | `#0B1020` |
-| Card Dark | `#111827` |
-
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Backend | NestJS 10 + Fastify + Prisma |
-| Web | Next.js 15 + React 19 |
-| Mobile | React Native + Expo |
-| Database | PostgreSQL 16 + pgvector |
-| Cache | Redis 7 |
-| Search | Meilisearch |
-| AI | Claude (Anthropic) + Voyage embeddings |
-
----
-
-## 📜 License
-
-Proprietary — All rights reserved.
+pnpm + Turbo monorepo · NestJS 10 + Fastify · Prisma + PostgreSQL · Redis · BullMQ · zod ·
+libphonenumber-js · argon2 · jose (RS256) · otplib · Swagger/OpenAPI. Providers: Twilio + Africa's
+Talking (hybrid), Resend, Cloudflare R2, Google OAuth.

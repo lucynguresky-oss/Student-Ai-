@@ -1,0 +1,71 @@
+/**
+ * Reserved-username blocklist (§5.3). Case-insensitive. Extend freely.
+ * Covers brand terms, roles, routes, and impersonation-prone handles.
+ */
+export const RESERVED_USERNAMES = new Set<string>([
+  // Brand / product
+  'learnix',
+  'lumi',
+  'official',
+  'team',
+  'staff',
+  // Roles / auth
+  'admin',
+  'administrator',
+  'root',
+  'superuser',
+  'moderator',
+  'mod',
+  'support',
+  'help',
+  'helpdesk',
+  'security',
+  'abuse',
+  'legal',
+  'billing',
+  'payments',
+  'noreply',
+  'no-reply',
+  'postmaster',
+  'webmaster',
+  // Routes / infra
+  'api',
+  'www',
+  'app',
+  'auth',
+  'login',
+  'logout',
+  'signup',
+  'register',
+  'settings',
+  'account',
+  'accounts',
+  'about',
+  'privacy',
+  'terms',
+  'tos',
+  'onboarding',
+  'welcome',
+  'me',
+  'u',
+  'user',
+  'users',
+  'null',
+  'undefined',
+  'system',
+  'status',
+  'health',
+  'assets',
+  'static',
+  'cdn',
+  'media',
+  'search',
+  'explore',
+  'feed',
+  'home',
+  'dashboard',
+]);
+
+export function isReservedUsername(username: string): boolean {
+  return RESERVED_USERNAMES.has(username.trim().toLowerCase());
+}

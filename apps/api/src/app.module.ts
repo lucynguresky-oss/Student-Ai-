@@ -1,75 +1,34 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
-import configuration from './config/configuration';
-import { PrismaModule } from './prisma/prisma.module';
-import { XpModule } from './common/xp.module';
-import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
-import { PostsModule } from './posts/posts.module';
-import { FeedModule } from './feed/feed.module';
-import { CommentsModule } from './comments/comments.module';
-import { NotificationsModule } from './notifications/notifications.module';
-import { ModerationModule } from './moderation/moderation.module';
-import { MessagingModule } from './messaging/messaging.module';
-import { SearchModule } from './search/search.module';
-import { SubjectsModule } from './subjects/subjects.module';
-import { StoriesModule } from './stories/stories.module';
-import { SafetyModule } from './safety/safety.module';
-import { SavedModule } from './saved/saved.module';
-import { AiTutorModule } from './ai-tutor/ai-tutor.module';
-import { FlashcardsModule } from './flashcards/flashcards.module';
-import { StudySessionsModule } from './study-sessions/study-sessions.module';
-import { GamificationModule } from './gamification/gamification.module';
+import { APP_FILTER } from '@nestjs/core';
+import { CoreModule } from './core/core.module';
+import { ProvidersModule } from './providers/providers.module';
+import { AllExceptionsFilter } from './core/http/app-exception';
+import { AuthModule } from './modules/auth/auth.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
+import { TracksModule } from './modules/tracks/tracks.module';
+import { ReferenceModule } from './modules/tracks/reference.module';
+import { UsersModule } from './modules/users/users.module';
+import { SessionsModule } from './modules/sessions/sessions.module';
+import { SecurityModule } from './modules/security/security.module';
+import { PrivacyModule } from './modules/privacy/privacy.module';
+import { NotificationPrefsModule } from './modules/notification-prefs/notification-prefs.module';
+import { AccountLifecycleModule } from './modules/account-lifecycle/account-lifecycle.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      load: [configuration],
-    }),
-
-    // Rate limiting — configured from env via configuration.ts
-    ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => [
-        {
-          ttl: config.get<number>('throttle.ttl') ?? 60_000,
-          limit: config.get<number>('throttle.limit') ?? 120,
-        },
-      ],
-    }),
-
-    // Core infrastructure
-    PrismaModule,
-
-    // XP / gamification — global so any module can inject XpService
-    XpModule,
-
-    // Feature modules
+    CoreModule,
+    ProvidersModule,
     AuthModule,
+    OnboardingModule,
+    TracksModule,
+    ReferenceModule,
     UsersModule,
-    PostsModule,
-    FeedModule,
-    CommentsModule,
-    NotificationsModule,
-    ModerationModule,
-    MessagingModule,
-
-    // Discovery & curriculum
-    SearchModule,
-    SubjectsModule,
-
-    // AI Tutor
-    AiTutorModule,
-    FlashcardsModule,
-    StudySessionsModule,
-    GamificationModule,
-
-    // Social parity
-    StoriesModule,
-    SafetyModule,
-    SavedModule,
+    SessionsModule,
+    SecurityModule,
+    PrivacyModule,
+    NotificationPrefsModule,
+    AccountLifecycleModule,
   ],
+  providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })
 export class AppModule {}
