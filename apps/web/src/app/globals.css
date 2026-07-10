@@ -1,0 +1,260 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS Variables ─────────────────────────────────────────── */
+:root {
+  --lx-teal:   #2dd4bf;
+  --lx-blue:   #3b82f6;
+  --lx-purple: #9333ea;
+
+  --bg:        #0a0a0f;
+  --bg-card:   #111118;
+  --bg-surface:#16161f;
+  --border:    rgba(255,255,255,0.08);
+  --border-subtle: rgba(255,255,255,0.04);
+  --text:      #f0f0f8;
+  --text-muted:#8888aa;
+  --text-dim:  #555570;
+
+  --font-inter: 'Inter', system-ui, sans-serif;
+}
+
+/* ─── Base Reset ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-family: var(--font-inter);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+/* RTL support — applied when dir="rtl" is set on <html> */
+[dir="rtl"] { font-family: var(--font-inter); }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ─── Gradient Utilities ─────────────────────────────────────── */
+.lx-gradient-text {
+  background: linear-gradient(90deg, var(--lx-teal), var(--lx-blue), var(--lx-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.lx-gradient-bg {
+  background: linear-gradient(135deg, var(--lx-teal) 0%, var(--lx-blue) 50%, var(--lx-purple) 100%);
+}
+
+.lx-gradient-border {
+  position: relative;
+}
+.lx-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--lx-teal), var(--lx-blue), var(--lx-purple));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ─── Card ───────────────────────────────────────────────────── */
+.lx-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  backdrop-filter: blur(12px);
+}
+
+/* ─── Glass ──────────────────────────────────────────────────── */
+.lx-glass {
+  background: rgba(17,17,24,0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+}
+
+/* ─── Focus Ring ─────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--lx-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Selection ──────────────────────────────────────────────── */
+::selection {
+  background: rgba(59,130,246,0.3);
+  color: #fff;
+}
+
+/* ─── Input Base ─────────────────────────────────────────────── */
+.lx-input {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: var(--text);
+  font-size: 0.9375rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.lx-input::placeholder { color: var(--text-dim); }
+.lx-input:focus {
+  outline: none;
+  border-color: var(--lx-blue);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+.lx-input.error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.15);
+}
+
+/* ─── Button Base ────────────────────────────────────────────── */
+.lx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  min-height: 44px;
+  user-select: none;
+}
+.lx-btn:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
+.lx-btn:active:not(:disabled) { transform: translateY(0); }
+.lx-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.lx-btn-primary {
+  background: linear-gradient(135deg, var(--lx-teal), var(--lx-blue), var(--lx-purple));
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(59,130,246,0.3);
+}
+.lx-btn-primary:hover:not(:disabled) {
+  box-shadow: 0 6px 28px rgba(59,130,246,0.45);
+}
+
+.lx-btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.lx-btn-ghost:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--text);
+}
+
+/* ─── Animations ─────────────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33% { transform: translateY(-8px) rotate(1deg); }
+  66% { transform: translateY(-4px) rotate(-1deg); }
+}
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in { animation: fade-in 0.5s ease forwards; }
+.animate-slide-up { animation: slide-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-float { animation: float 3.5s ease-in-out infinite; }
+.animate-gradient { 
+  background-size: 200% 200%; 
+  animation: gradient-shift 4s ease infinite; 
+}
+.animate-spin-slow { animation: spin-slow 8s linear infinite; }
+
+/* ─── Loading Shimmer ────────────────────────────────────────── */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+/* ─── Progress Bar ───────────────────────────────────────────── */
+.lx-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-surface);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.lx-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--lx-teal), var(--lx-blue), var(--lx-purple));
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─── Badge ──────────────────────────────────────────────────── */
+.lx-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.lx-badge-teal { background: rgba(45,212,191,0.12); color: var(--lx-teal); }
+.lx-badge-blue { background: rgba(59,130,246,0.12); color: var(--lx-blue); }
+.lx-badge-purple { background: rgba(147,51,234,0.12); color: var(--lx-purple); }
+
+/* ─── Noise Texture Overlay ──────────────────────────────────── */
+.noise-overlay::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.025;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
