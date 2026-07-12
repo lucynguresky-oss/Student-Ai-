@@ -57,7 +57,14 @@ function SettingsRow({ item, toggles, onToggle }: { item: SettingItem; toggles: 
     }
     if (item.action) { item.action(); return; }
     if (item.toggle && item.toggleKey) { onToggle(item.toggleKey); return; }
-    if (item.href && item.href !== '#') router.push(item.href);
+    if (item.href && item.href !== '#') {
+      if (item.href.startsWith('/settings/')) {
+        const slug = item.href.replace('/settings/', '');
+        router.push(`/settings/detail?slug=${slug}`);
+      } else {
+        router.push(item.href);
+      }
+    }
   };
 
   const val = typeof item.value === 'function' ? item.value() : item.value;
@@ -253,7 +260,7 @@ export default function SettingsPage() {
       {/* Account Centre Banner */}
       {!search && (
         <button
-          onClick={() => router.push('/settings/account')}
+          onClick={() => router.push('/settings/detail?slug=account')}
           style={{ display: 'block', width: 'calc(100% - 24px)', margin: '12px 12px 0', padding: '14px', background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', marginBottom: -1, cursor: 'pointer', textAlign: 'left' }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <div style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>

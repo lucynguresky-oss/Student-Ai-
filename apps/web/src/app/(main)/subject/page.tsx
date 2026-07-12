@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 const SUBJECT_DATA: Record<string, any> = {
   biology: {
@@ -48,11 +49,12 @@ const SUBJECT_DATA: Record<string, any> = {
   }
 };
 
-export default function SubjectPage({ params }: { params: { id: string } }) {
+function SubjectContent() {
   const [activeTab, setActiveTab] = useState('Overview');
   const [dbTopics, setDbTopics] = useState<string[]>([]);
   
-  const subjectId = params.id.toLowerCase();
+  const searchParams = useSearchParams();
+  const subjectId = (searchParams.get('id') || 'biology').toLowerCase();
   
   useEffect(() => {
     const keyMap: Record<string, string> = {
@@ -76,7 +78,7 @@ export default function SubjectPage({ params }: { params: { id: string } }) {
     }
   }, [subjectId]);
 
-  const data = SUBJECT_DATA[subjectId] || { name: params.id, emoji: '📚', color: '#888', bg: 'rgba(136,136,136,0.12)', topics: [], teachers: [], videos: [] };
+  const data = SUBJECT_DATA[subjectId] || { name: subjectId, emoji: '📚', color: '#888', bg: 'rgba(136,136,136,0.12)', topics: [], teachers: [], videos: [] };
   const topicsToDisplay = dbTopics.length > 0 ? dbTopics : data.topics;
 
   return (
@@ -98,7 +100,7 @@ export default function SubjectPage({ params }: { params: { id: string } }) {
         
         {/* Quick Actions */}
         <div style={{ display: 'flex', gap: 10, marginTop: 20, width: '100%', maxWidth: 400 }}>
-          <Link href={`/learn/quiz/q_${subjectId}`} style={{ flex: 1, padding: '12px 0', background: data.color, borderRadius: 12, color: 'white', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>Take a Quiz</Link>
+          <Link href={`/learn/quiz?id=q_${subjectId}`} style={{ flex: 1, padding: '12px 0', background: data.color, borderRadius: 12, color: 'white', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>Take a Quiz</Link>
           <Link href={`/flashcards?subject=${subjectId}`} style={{ flex: 1, padding: '12px 0', background: 'var(--surface)', border: `1px solid ${data.color}44`, borderRadius: 12, color: 'white', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>Flashcards</Link>
         </div>
       </div>
@@ -175,5 +177,13 @@ export default function SubjectPage({ params }: { params: { id: string } }) {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SubjectPage() {
+  return (
+    <Suspense fallback={<div style={{ color: 'white', padding: 20 }}>Loading subject...</div>}>
+      <SubjectContent />
+    </Suspense>
   );
 }

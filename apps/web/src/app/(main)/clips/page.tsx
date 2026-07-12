@@ -156,7 +156,7 @@ function ClipItem({ clip }: { clip: typeof CLIPS[0] }) {
             <Link href={`/ai-tutor?context=${encodeURIComponent(clip.description)}&mode=explain`} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(59,130,246,0.3)', border: '1px solid rgba(59,130,246,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'white', textDecoration: 'none' }}>
               🤖 AI Explain
             </Link>
-            <Link href={`/learn/quiz/q1?context=${encodeURIComponent(clip.subject)}`} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(34,197,94,0.3)', border: '1px solid rgba(34,197,94,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'white', textDecoration: 'none' }}>
+            <Link href={`/learn/quiz?id=q1&context=${encodeURIComponent(clip.subject)}`} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(34,197,94,0.3)', border: '1px solid rgba(34,197,94,0.5)', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'white', textDecoration: 'none' }}>
               🎯 Test Me
             </Link>
           </div>

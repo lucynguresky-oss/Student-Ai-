@@ -96,7 +96,7 @@ function InlineQuiz({ block }: { block: any }) {
   );
 }
 
-export default function LessonPage({ params }: { params: { id: string } }) {
+export default function LessonPage() {
   const [completed, setCompleted] = useState(false);
   const readTime = Math.ceil(LESSON.durationMin);
 
@@ -148,7 +148,7 @@ export default function LessonPage({ params }: { params: { id: string } }) {
             <Link href="/learn" className="btn-outline" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', fontSize: '15px', fontWeight: 700 }}>
               Back to Learn
             </Link>
-            <Link href="/learn/quiz/l1" className="btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px' }}>
+            <Link href="/learn/quiz?id=q1" className="btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px' }}>
               <span>🎯</span> Take Quiz
             </Link>
           </div>

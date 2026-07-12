@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
-import { cookies } from 'next/headers';
 import './globals.css';
 import { StoreProvider } from '@/store/useStore';
 import { I18nProvider } from '@/lib/i18n';
@@ -29,25 +28,16 @@ export const viewport = {
   maximumScale: 1,
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Read locale from cookie for SSR — set by the i18n provider on locale change.
-  // Falls back to 'en' if not set yet (first visit).
-  const cookieStore = await cookies();
-  const initialLocale = cookieStore.get('learnix_locale')?.value ?? 'en';
-
-  // RTL locales need dir="rtl" on <html> at SSR time to avoid layout flash.
-  const rtlLocales = new Set(['ar', 'he', 'fa', 'ur', 'ps']);
-  const initialDir = rtlLocales.has(initialLocale) ? 'rtl' : 'ltr';
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
-      lang={initialLocale}
-      dir={initialDir}
+      lang="en"
+      dir="ltr"
       className={`${inter.variable} ${plusJakarta.variable}`}
     >
       <body>
         <StoreProvider>
-          <I18nProvider initialLocale={initialLocale}>
+          <I18nProvider>
             <div className="app-shell">
               {children}
             </div>

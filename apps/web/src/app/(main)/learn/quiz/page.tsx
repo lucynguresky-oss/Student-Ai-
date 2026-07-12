@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 const QUIZZES: Record<string, any> = {
   q1: {
@@ -37,8 +38,9 @@ const QUIZZES: Record<string, any> = {
   }
 };
 
-export default function QuizPage({ params }: { params: { id: string } }) {
-  const quizId = params.id.toLowerCase();
+function QuizContent() {
+  const searchParams = useSearchParams();
+  const quizId = (searchParams.get('id') || 'q1').toLowerCase();
   const QUIZ = QUIZZES[quizId] || QUIZZES['q1'];
 
   const [currentQ, setCurrentQ] = useState(0);
@@ -250,5 +252,13 @@ export default function QuizPage({ params }: { params: { id: string } }) {
         </div>
       )}
     </div>
+  );
+}
+
+export default function QuizPage() {
+  return (
+    <Suspense fallback={<div style={{ color: 'white', padding: 20 }}>Loading quiz...</div>}>
+      <QuizContent />
+    </Suspense>
   );
 }

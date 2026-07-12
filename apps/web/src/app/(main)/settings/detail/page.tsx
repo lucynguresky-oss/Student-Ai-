@@ -1,7 +1,7 @@
 'use client';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useStore } from '@/store/useStore';
 import { useI18n } from '@/lib/i18n';
 
@@ -141,10 +141,10 @@ type SlugType =
   | 'blocked'
   | 'status';
 
-export default function SettingsSubPage() {
+function SettingsDetailContent() {
   const router = useRouter();
-  const params = useParams();
-  const slug = ((params.slug as string) ?? 'unknown') as SlugType;
+  const searchParams = useSearchParams();
+  const slug = (searchParams.get('slug') ?? 'unknown') as SlugType;
   const { currentUser, login } = useStore();
 
   // Toast indicator state
@@ -1321,3 +1321,11 @@ const styles = {
     transition: 'background 0.15s',
   },
 };
+
+export default function SettingsSubPage() {
+  return (
+    <Suspense fallback={<div style={{ color: 'white', padding: 20 }}>Loading settings…</div>}>
+      <SettingsDetailContent />
+    </Suspense>
+  );
+}

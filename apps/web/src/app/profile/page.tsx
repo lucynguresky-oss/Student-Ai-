@@ -1,9 +1,9 @@
 'use client';
 import { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useStore } from '@/store/useStore';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth-store';
+import { useStore } from '@/store/useStore';
 
 function AccountSwitcherModal({ onClose }: { onClose: () => void }) {
   const accountList = useAuthStore((state) => state.accountList);

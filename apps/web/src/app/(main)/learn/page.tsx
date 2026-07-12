@@ -62,7 +62,7 @@ export default function LearnPage() {
           <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Continue Learning</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {RECENT.map(item => (
-              <Link key={item.id} href={`/learn/lesson/${item.id}`} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', background: 'var(--surface)', borderRadius: '14px', border: '1px solid var(--border)' }}>
+              <Link key={item.id} href={`/learn/lesson?id=${item.id}`} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', background: 'var(--surface)', borderRadius: '14px', border: '1px solid var(--border)' }}>
                 <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: `${item.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>
                   {item.emoji}
                 </div>

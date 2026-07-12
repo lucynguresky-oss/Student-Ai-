@@ -24,7 +24,7 @@ const NOTIFICATIONS: Notification[] = [
   { id: 'n1', type: 'social', title: 'Mr. Omondi liked your post', description: '"Finally cracked quadratic equations 🎉"', timestamp: h(0.5), read: false, avatar: 'omondi', href: '/feed' },
   { id: 'n2', type: 'learning', title: '🔥 Daily streak! 15 days', description: 'Keep going! You\'re on fire. Complete today\'s lesson to maintain your streak.', timestamp: h(1), read: false, icon: '🔥', href: '/learn' },
   { id: 'n3', type: 'mention', title: '@chemdaily_ke mentioned you', description: '"Check out @amina_learns explanation of electrochemistry!"', timestamp: h(2), read: false, avatar: 'chem', href: '/feed' },
-  { id: 'n4', type: 'learning', title: 'New quiz available', description: 'Biology Chapter 4: Cell Division — Test your knowledge now!', timestamp: h(3), read: false, icon: '🎯', href: '/learn/quiz/q1' },
+  { id: 'n4', type: 'learning', title: 'New quiz available', description: 'Biology Chapter 4: Cell Division — Test your knowledge now!', timestamp: h(3), read: false, icon: '🎯', href: '/learn/quiz?id=q1' },
   { id: 'n5', type: 'social', title: 'amina_w started following you', description: '3 mutual friends · Biology Form 4', timestamp: h(5), read: true, avatar: 'amina2', href: '/profile?u=amina_w' },
   { id: 'n6', type: 'learning', title: 'You earned +50 XP!', description: 'Completed "Cell Division & Mitosis" lesson. Level 6 → 7 progress: 78%', timestamp: h(8), read: true, icon: '⚡', href: '/learn' },
   { id: 'n7', type: 'social', title: 'Your clip got 100 likes! 🎉', description: '"Photosynthesis in 60 seconds" is trending in Biology', timestamp: h(12), read: true, avatar: 'amina', href: '/clips' },

@@ -2,14 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@learnix/types'],
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:4000/api/:path*',
-      },
-    ];
+  output: 'export',
+  trailingSlash: true,
+  images: {
+    unoptimized: true,
   },
+  basePath: process.env.NODE_ENV === 'production' ? '/Student-Ai-' : '',
 };
 
 module.exports = nextConfig;
