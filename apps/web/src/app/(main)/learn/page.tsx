@@ -1,150 +1,157 @@
 'use client';
+import { useState } from 'react';
+import Link from 'next/link';
 
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Flame, Zap, Lock, CheckCircle, PlayCircle, ChevronRight, Trophy } from 'lucide-react';
-import LumiMascot from '@/components/LumiMascot';
-import Button from '@/components/ui/Button';
-import { tracksApi } from '@/lib/api';
+const SUBJECTS = [
+  { key: 'BIO', label: 'Biology', emoji: '🧬', color: '#22C55E', topics: 12, lessons: 48 },
+  { key: 'CHE', label: 'Chemistry', emoji: '⚗️', color: '#F59E0B', topics: 10, lessons: 40 },
+  { key: 'PHY', label: 'Physics', emoji: '🚀', color: '#3B82F6', topics: 11, lessons: 44 },
+  { key: 'MAT', label: 'Mathematics', emoji: '📐', color: '#7C3AED', topics: 14, lessons: 56 },
+  { key: 'ENG', label: 'English', emoji: '📝', color: '#EC4899', topics: 8, lessons: 32 },
+];
 
-interface Track { id: string; name: string; description?: string; lessonCount?: number; }
-interface Lesson { id: string; title: string; durationMins?: number; completed?: boolean; locked?: boolean; }
+const DAILY_QUESTS = [
+  { id: 'q1', label: 'Complete 1 Biology lesson', xp: 50, done: false, emoji: '🧬' },
+  { id: 'q2', label: 'Score 80%+ on a quiz', xp: 75, done: true, emoji: '🎯' },
+  { id: 'q3', label: 'Watch 2 Learnix Clips', xp: 30, done: false, emoji: '🎬' },
+];
 
-const MOCK_LESSONS: Lesson[] = [
-  { id: 'l1', title: 'Introduction', durationMins: 5, completed: false, locked: false },
-  { id: 'l2', title: 'Core Concepts', durationMins: 8, completed: false, locked: true },
-  { id: 'l3', title: 'Practice Exercises', durationMins: 10, completed: false, locked: true },
-  { id: 'l4', title: 'Quiz & Review', durationMins: 7, completed: false, locked: true },
+const RECENT = [
+  { id: 'l1', subject: 'Biology', title: 'Cell Division & Mitosis', progress: 60, emoji: '🧬', color: '#22C55E' },
+  { id: 'l2', subject: 'Maths', title: 'Quadratic Equations', progress: 35, emoji: '📐', color: '#7C3AED' },
 ];
 
 export default function LearnPage() {
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [activeTrack, setActiveTrack] = useState<Track | null>(null);
-  const [dailyGoalMins] = useState(10);
-  const [doneMins] = useState(0);
-  const progress = Math.min(100, (doneMins / dailyGoalMins) * 100);
+  const [activeSubject, setActiveSubject] = useState<string | null>(null);
 
-  useEffect(() => {
-    tracksApi.list().then((data: unknown) => {
-      if (Array.isArray(data)) {
-        const list = data as Track[];
-        setTracks(list);
-        if (list.length > 0) setActiveTrack(list[0]);
-      }
-    }).catch(() => {
-      setTracks([{ id: 'demo', name: 'General Learning', description: 'Start your journey' }]);
-      setActiveTrack({ id: 'demo', name: 'General Learning' });
-    });
-  }, []);
+  const streakDays = 15;
+  const totalXp = 2840;
+  const level = Math.floor(Math.sqrt(totalXp / 100)) + 1;
+  const xpToNext = (level * level * 100);
+  const xpPct = Math.min(100, (totalXp / xpToNext) * 100);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-8">
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-black text-[var(--text)]">Your Path</h1>
-          <p className="text-sm text-[var(--text-muted)]">Keep going — every lesson counts</p>
+    <div style={{ paddingBottom: '80px' }}>
+      {/* Top bar */}
+      <div className="top-bar">
+        <span style={{ fontWeight: 800, fontSize: '20px' }}>Learn</span>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#F59E0B', fontWeight: 700, fontSize: '15px' }}>
+            <span>🔥</span>{streakDays}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#3B82F6', fontWeight: 700, fontSize: '15px' }}>
+            <span>⚡</span>{totalXp.toLocaleString()}
+          </div>
         </div>
-        <LumiMascot size={56} mood="thinking" />
-      </motion.div>
+      </div>
 
-      {/* Daily Goal */}
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
-        className="lx-card p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Flame size={18} className="text-orange-400" />
-            <span className="font-semibold text-[var(--text)]">Daily Goal</span>
-          </div>
-          <span className="text-sm text-[var(--text-muted)]">{doneMins}/{dailyGoalMins} min</span>
+      {/* Level + XP bar */}
+      <div style={{ padding: '16px', background: 'var(--bg2)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+          <span style={{ fontWeight: 700, color: 'var(--text)' }}>Level {level}</span>
+          <span style={{ color: 'var(--text2)' }}>{totalXp} / {xpToNext} XP</span>
         </div>
-        <div className="lx-progress mb-2">
-          <motion.div className="lx-progress-fill" initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} />
+        <div style={{ height: '8px', background: 'var(--surface)', borderRadius: '999px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${xpPct}%`, background: 'var(--grad)', borderRadius: '999px', transition: 'width 0.6s ease' }} />
         </div>
-        <div className="flex items-center gap-4 mt-3">
-          <div className="flex items-center gap-1.5">
-            <Flame size={14} className="text-orange-400" />
-            <span className="text-xs text-[var(--text-muted)]">0 day streak</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Zap size={14} className="text-lx-blue" />
-            <span className="text-xs text-[var(--text-muted)]">0 XP today</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Trophy size={14} className="text-lx-purple" />
-            <span className="text-xs text-[var(--text-muted)]">0 badges</span>
-          </div>
-        </div>
-      </motion.div>
+      </div>
 
-      {/* Track selector */}
-      {tracks.length > 1 && (
-        <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <h2 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Your Tracks</h2>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {tracks.map((t) => (
-              <button key={t.id} id={`track-btn-${t.id}`}
-                onClick={() => setActiveTrack(t)}
-                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
-                  activeTrack?.id === t.id
-                    ? 'bg-lx-blue/10 border-lx-blue text-lx-blue'
-                    : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] bg-[var(--bg-surface)]'
-                }`}
-              >
-                {t.name}
-              </button>
+      {/* Continue Learning */}
+      {RECENT.length > 0 && (
+        <div style={{ padding: '16px 16px 0' }}>
+          <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Continue Learning</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {RECENT.map(item => (
+              <Link key={item.id} href={`/learn/lesson/${item.id}`} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', background: 'var(--surface)', borderRadius: '14px', border: '1px solid var(--border)' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: `${item.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>
+                  {item.emoji}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text2)', marginBottom: '2px' }}>{item.subject}</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
+                  <div style={{ height: '4px', background: 'var(--surface2)', borderRadius: '999px' }}>
+                    <div style={{ height: '100%', width: `${item.progress}%`, background: item.color, borderRadius: '999px' }} />
+                  </div>
+                </div>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </Link>
             ))}
           </div>
-        </motion.section>
+        </div>
       )}
 
-      {/* Lessons */}
-      {activeTrack && (
-        <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-lg text-[var(--text)]">{activeTrack.name}</h2>
-            <span className="lx-badge lx-badge-blue">0% complete</span>
-          </div>
-          <div className="flex flex-col gap-3">
-            {MOCK_LESSONS.map((lesson, i) => (
-              <motion.div key={lesson.id}
-                initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + i * 0.05 }}
-                className={`lx-card p-4 flex items-center gap-4 transition-all ${
-                  lesson.locked ? 'opacity-50' : 'hover:bg-[var(--bg-surface)] cursor-pointer'
-                }`}
-              >
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  lesson.completed ? 'bg-lx-teal/10' : lesson.locked ? 'bg-[var(--bg-surface)]' : 'lx-gradient-bg'
-                }`}>
-                  {lesson.completed ? (
-                    <CheckCircle size={20} className="text-lx-teal" />
-                  ) : lesson.locked ? (
-                    <Lock size={18} className="text-[var(--text-dim)]" />
-                  ) : (
-                    <PlayCircle size={20} className="text-white" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`font-semibold text-sm ${lesson.locked ? 'text-[var(--text-dim)]' : 'text-[var(--text)]'}`}>
-                    {lesson.title}
-                  </p>
-                  {lesson.durationMins && (
-                    <p className="text-xs text-[var(--text-dim)] mt-0.5">{lesson.durationMins} min</p>
-                  )}
-                </div>
-                {!lesson.locked && (
-                  <ChevronRight size={16} className="text-[var(--text-dim)] flex-shrink-0" />
-                )}
-              </motion.div>
-            ))}
-          </div>
-          <div className="mt-6 text-center">
-            <Button id="start-lesson-btn" size="lg" className="px-10">
-              Start lesson 1
-            </Button>
-          </div>
-        </motion.section>
-      )}
+      {/* Daily Quests */}
+      <div style={{ padding: '20px 16px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <div style={{ fontSize: '15px', fontWeight: 700 }}>Daily Quests</div>
+          <span style={{ fontSize: '12px', color: 'var(--blue)' }}>1/3 done</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {DAILY_QUESTS.map(q => (
+            <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', background: q.done ? 'rgba(34,197,94,0.08)' : 'var(--surface)', borderRadius: '12px', border: `1px solid ${q.done ? 'rgba(34,197,94,0.3)' : 'var(--border)'}` }}>
+              <span style={{ fontSize: '20px' }}>{q.done ? '✅' : q.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13.5px', fontWeight: 500, color: q.done ? 'var(--text2)' : 'var(--text)', textDecoration: q.done ? 'line-through' : 'none' }}>{q.label}</div>
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#F59E0B', background: 'rgba(245,158,11,0.12)', padding: '3px 8px', borderRadius: '6px' }}>+{q.xp} XP</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Subjects */}
+      <div style={{ padding: '20px 16px 0' }}>
+        <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Subjects</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          {SUBJECTS.map(s => (
+            <Link key={s.key} href={`/learn/subject/${s.key.toLowerCase()}`} style={{ padding: '16px', background: 'var(--surface)', borderRadius: '16px', border: `1px solid ${activeSubject === s.key ? s.color : 'var(--border)'}`, display: 'flex', flexDirection: 'column', gap: '10px', transition: 'border-color 0.2s' }}>
+              <div style={{ fontSize: '32px' }}>{s.emoji}</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '15px' }}>{s.label}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text2)', marginTop: '2px' }}>{s.lessons} lessons</div>
+              </div>
+              <div style={{ height: '4px', background: 'var(--surface2)', borderRadius: '999px' }}>
+                <div style={{ height: '100%', width: '40%', background: s.color, borderRadius: '999px' }} />
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Quick Access */}
+      <div style={{ padding: '20px 16px 0' }}>
+        <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px' }}>Quick Access</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <Link href="/leaderboard" style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(239,68,68,0.06))', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', textDecoration: 'none' }}>
+            <span style={{ fontSize: '28px' }}>🏆</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: 'white' }}>Leaderboard</div>
+              <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px' }}>Rank #4 · 9,870 XP</div>
+            </div>
+          </Link>
+          <Link href="/flashcards" style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(59,130,246,0.06))', border: '1px solid rgba(124,58,237,0.25)', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', textDecoration: 'none' }}>
+            <span style={{ fontSize: '28px' }}>🃏</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: 'white' }}>Flashcards</div>
+              <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px' }}>5 decks · 50 cards</div>
+            </div>
+          </Link>
+          <Link href="/papers" style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(59,130,246,0.06))', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', textDecoration: 'none' }}>
+            <span style={{ fontSize: '28px' }}>📄</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: 'white' }}>Past Papers</div>
+              <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px' }}>16 papers · KCSE</div>
+            </div>
+          </Link>
+          <Link href="/ai-tutor" style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(24,214,200,0.06))', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '8px', textDecoration: 'none' }}>
+            <span style={{ fontSize: '28px' }}>🤖</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: 'white' }}>AI Tutor</div>
+              <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px' }}>GPT-4o · KCSE Ready</div>
+            </div>
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

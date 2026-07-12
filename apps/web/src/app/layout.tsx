@@ -1,50 +1,58 @@
 import type { Metadata } from 'next';
-import { NextIntlClientProvider } from 'next-intl';
-import { getLocale, getMessages } from 'next-intl/server';
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
+import { cookies } from 'next/headers';
 import './globals.css';
+import { StoreProvider } from '@/store/useStore';
+import { I18nProvider } from '@/lib/i18n';
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
+const plusJakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-plus-jakarta', display: 'swap' });
+
+// Arabic script subset for ar locale
+const notoArabic = Inter({ subsets: ['latin'], variable: '--font-arabic', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: { default: 'Learnix — Learn Anything, Anywhere', template: '%s | Learnix' },
-  description:
-    'Learnix is a global education platform combining social learning with gamified lessons. Learn with Lumi — your personal AI guide.',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://learnix.app'),
+  title: 'Learnix — Social Learning',
+  description: 'The social learning platform for students around the world. Learn, share, and grow together.',
+  themeColor: '#000000',
+  manifest: '/manifest.json',
   openGraph: {
+    title: 'Learnix',
+    description: 'Social Learning Platform',
     type: 'website',
-    locale: 'en_US',
-    url: 'https://learnix.app',
-    siteName: 'Learnix',
-    title: 'Learnix — Learn Anything, Anywhere',
-    description: 'Instagram-style social layer + Duolingo-style gamified learning for a worldwide audience.',
-    images: [{ url: '/og.png', width: 1200, height: 630 }],
   },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Learnix — Learn Anything, Anywhere',
-    description: 'Learn with Lumi — your personal AI guide.',
-    images: ['/og.png'],
-  },
-  robots: { index: true, follow: true },
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = await getLocale();
-  const messages = await getMessages();
+  // Read locale from cookie for SSR — set by the i18n provider on locale change.
+  // Falls back to 'en' if not set yet (first visit).
+  const cookieStore = await cookies();
+  const initialLocale = cookieStore.get('learnix_locale')?.value ?? 'en';
 
-  // Determine RTL from locale
-  const rtlLocales = ['ar', 'he', 'fa', 'ur', 'yi', 'dv', 'ku'];
-  const dir = rtlLocales.includes(locale) ? 'rtl' : 'ltr';
+  // RTL locales need dir="rtl" on <html> at SSR time to avoid layout flash.
+  const rtlLocales = new Set(['ar', 'he', 'fa', 'ur', 'ps']);
+  const initialDir = rtlLocales.has(initialLocale) ? 'rtl' : 'ltr';
 
   return (
-    <html lang={locale} dir={dir} className="dark">
-      <head>
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      </head>
-      <body className="noise-overlay">
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          {children}
-        </NextIntlClientProvider>
+    <html
+      lang={initialLocale}
+      dir={initialDir}
+      className={`${inter.variable} ${plusJakarta.variable}`}
+    >
+      <body>
+        <StoreProvider>
+          <I18nProvider initialLocale={initialLocale}>
+            <div className="app-shell">
+              {children}
+            </div>
+          </I18nProvider>
+        </StoreProvider>
       </body>
     </html>
   );
