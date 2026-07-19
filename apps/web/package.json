@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf .next"
+    "clean": "rimraf .next",
+    "deploy": "pnpm build && gh-pages -d out"
   },
   "dependencies": {
     "@learnix/types": "workspace:*",
@@ -24,6 +25,7 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "gh-pages": "^6.3.0",
     "rimraf": "^6.0.0",
     "typescript": "^5.7.0"
   }
